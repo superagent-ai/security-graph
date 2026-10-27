@@ -53,13 +53,18 @@ type Record struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 type Query struct {
-	Kind        string
-	ReportID    string
-	AssetID     string
-	Limit       int
-	After       string
-	Search      string
-	ConnectedTo []string
+	Kind         string
+	ReportID     string
+	AssetID      string
+	Limit        int
+	After        string
+	Search       string
+	ConnectedTo  []string
+	FindingKind  string
+	TriageStatus string
+	ReportType   string
+	Status       string
+	Offset       int
 }
 type Change struct {
 	Cursor    int64     `json:"cursor"`

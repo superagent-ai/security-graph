@@ -2,7 +2,7 @@
 
 Superagent Security Graph will make Superagent’s native security knowledge available to customer-selected agents and models through MCP. Customers can use a PR review bot, pentester, or coding agent such as Codex to retrieve context, contribute findings, and record investigation and remediation results.
 
-The implementation will live in the private repository `superagent-ai/security-graph`. It will reuse the existing finding and report models from `superagent-ai/app`, including their lifecycle rules and report structure. Hosted and on-prem deployments run the same context engine, MCP/API surface, finding template, and versioned contracts. PostgreSQL is the default backend; a storage adapter interface supports custom database implementations. The hosted service works natively with Superagent’s existing organization identity and PostgreSQL database. Customers create an agent credential and connect to the existing hosted MCP endpoint; they do not provision a separate service account, database, import, or synchronization setup.
+The implementation will live in the private repository `superagent-ai/security-graph`. It will reuse the existing finding and report models from `superagent-ai/app`, including their lifecycle rules and report structure. Hosted and on-prem deployments run the same context engine, MCP/API surface, finding template, and versioned contracts. PostgreSQL is the default backend; a storage adapter interface supports custom database implementations. The hosted service works natively with Superagent’s existing organization identity and PostgreSQL database. Customers use an existing organization API key and connect to the existing hosted MCP endpoint; they do not provision a separate service account, database, import, or synchronization setup.
 
 This is the proposed release and implementation baseline as of 27 October 2026. Commercial packaging, delivery dates, and named owners remain open. Repository creation and implementation are subsequent work.
 
@@ -116,6 +116,10 @@ Retain remediation fields for proposed patches and code references. Add agent id
 A customer-agent result should update or attach to these existing concepts. A new submission envelope may carry transport metadata, but it must not introduce a competing finding lifecycle.
 
 Source: [existing finding template](https://github.com/superagent-ai/app/blob/1e26923fe224443e78a20718fe029b0e61006e81/lib/repository-red-team-advisory-types.ts#L118).
+
+## Native integration implementation status
+
+The native adapter now uses the existing app database and `sk_live_` API-key authentication behind the existing `/mcp` endpoint. Organization identity is derived exclusively from the key: no org setting, header, or tool field is needed. Current app keys retain their existing organization-wide permissions; granular scoped agent credentials remain future work. Local end-to-end checks exercise native records, external submissions through the shared finding template, lifecycle transitions, app REST visibility, notifications, isolation and revocation. Operator rollout requires the additive app migration plus `STORAGE_BACKEND=superagent`, a server database connection and app `SECURITY_GRAPH_URL`. This does not mean production has been deployed. The remainder of this plan describes the wider product scope, including work not yet implemented.
 
 ## Finding submission schema
 

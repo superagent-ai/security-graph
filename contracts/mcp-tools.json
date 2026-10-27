@@ -315,10 +315,25 @@
           "pattern": "\\S",
           "type": "string"
         },
+        "kind": {
+          "type": "string"
+        },
         "limit": {
           "type": "integer"
         },
+        "offset": {
+          "type": "integer"
+        },
         "search": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "triage_status": {
+          "type": "string"
+        },
+        "type": {
           "type": "string"
         }
       },
@@ -385,10 +400,25 @@
           "pattern": "\\S",
           "type": "string"
         },
+        "kind": {
+          "type": "string"
+        },
         "limit": {
           "type": "integer"
         },
+        "offset": {
+          "type": "integer"
+        },
         "search": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "triage_status": {
+          "type": "string"
+        },
+        "type": {
           "type": "string"
         }
       },
@@ -422,10 +452,25 @@
           "pattern": "\\S",
           "type": "string"
         },
+        "kind": {
+          "type": "string"
+        },
         "limit": {
           "type": "integer"
         },
+        "offset": {
+          "type": "integer"
+        },
         "search": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "triage_status": {
+          "type": "string"
+        },
+        "type": {
           "type": "string"
         }
       },
