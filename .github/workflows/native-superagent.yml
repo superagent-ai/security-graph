@@ -72,6 +72,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/supabase-bin"
           tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP/supabase-bin" supabase supabase-go
           echo "$RUNNER_TEMP/supabase-bin" >> "$GITHUB_PATH"
+      - name: Isolate Supabase project and host ports
+        id: supabase_config
+        working-directory: .
+        run: node scripts/configure-supabase-ci.mjs .superagent-app-ci
       - name: Start real local Supabase and apply app migrations
         run: supabase start --exclude logflare,studio,imgproxy,edge-runtime,vector
       - name: Run native integration
@@ -87,5 +91,5 @@ jobs:
           export SECURITY_GRAPH_PROJECT="$GITHUB_WORKSPACE"
           export INTEGRATION_TOKEN_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           bash scripts/test-security-graph-native.sh
-      - if: always()
+      - if: always() && steps.supabase_config.outcome == 'success'
         run: supabase stop --no-backup
