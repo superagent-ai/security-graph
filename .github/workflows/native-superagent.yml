@@ -1,0 +1,87 @@
+name: Native Superagent integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Immutable app commit to test
+        required: true
+        default: c26fde5d779c4d6be6f7c1e5b8e4936747b48dce
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    # Secrets are available only to trusted same-repository PRs and manual runs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Real app MCP PostgreSQL workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .superagent-app-ci
+    env:
+      TURNSTILE_SECRET_KEY: local-ci-placeholder
+      GITHUB_CLIENT_ID: local-ci-placeholder
+      GITHUB_CLIENT_SECRET: local-ci-placeholder
+      GOOGLE_CLIENT_ID: local-ci-placeholder
+      GOOGLE_CLIENT_SECRET: local-ci-placeholder
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Validate immutable app reference
+        working-directory: .
+        env:
+          APP_REF: ${{ inputs.app_ref || vars.SUPERAGENT_APP_INTEGRATION_REF }}
+        run: '[[ "$APP_REF" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: superagent-ai/app
+          ref: ${{ inputs.app_ref || vars.SUPERAGENT_APP_INTEGRATION_REF }}
+          ssh-key: ${{ secrets.SUPERAGENT_APP_DEPLOY_KEY }}
+          path: .superagent-app-ci
+          persist-credentials: false
+      - uses: pnpm/action-setup@a0ea98b2dc7d387a59324835f7421c1d5f8357b4 # v6
+        with:
+          cache: true
+          package_json_file: .superagent-app-ci/package.json
+          cache_dependency_path: .superagent-app-ci/pnpm-lock.yaml
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: Install pinned Supabase CLI
+        run: |
+          curl -fsSL https://github.com/supabase/cli/releases/download/v2.105.0/supabase_2.105.0_linux_amd64.tar.gz -o "$RUNNER_TEMP/supabase.tar.gz"
+          echo "11ac4410c11e8b03f0cc7fd9316d68146695b0e06115a0663364b07e7feb6db8  $RUNNER_TEMP/supabase.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/supabase-bin"
+          tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP/supabase-bin" supabase
+          echo "$RUNNER_TEMP/supabase-bin" >> "$GITHUB_PATH"
+      - name: Start real local Supabase and apply app migrations
+        run: supabase start --exclude analytics,studio,imgproxy,edge-runtime,vector
+      - name: Run native integration
+        run: |
+          supabase status --output env > "$RUNNER_TEMP/supabase.env"
+          set -a
+          source "$RUNNER_TEMP/supabase.env"
+          set +a
+          export NEXT_PUBLIC_SUPABASE_URL="$API_URL"
+          export NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
+          export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY"
+          export SECURITY_GRAPH_TEST_DATABASE_URL="$DB_URL"
+          export SECURITY_GRAPH_PROJECT="$GITHUB_WORKSPACE"
+          export INTEGRATION_TOKEN_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          bash scripts/test-security-graph-native.sh
+      - if: always()
+        run: supabase stop --no-backup

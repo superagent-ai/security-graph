@@ -7,3 +7,6 @@ coverage.out
 *.log
 .DS_Store
 credentials.json
+
+# Pinned private app checkout used by native integration CI.
+.superagent-app-ci/
