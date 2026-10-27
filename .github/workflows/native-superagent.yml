@@ -1,4 +1,4 @@
-name: Native Superagent integration
+name: App integration
 
 on:
   pull_request:
@@ -20,7 +20,7 @@ jobs:
   integration:
     # Secrets are available only to trusted same-repository PRs and manual runs.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    name: Real app MCP PostgreSQL workflow
+    name: End-to-end tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
