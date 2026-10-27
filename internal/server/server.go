@@ -96,6 +96,8 @@ func add[I any, O any](s *mcp.Server, name, description string, readOnly bool, h
 		cached, _ = inputSchemas.LoadOrStore(typ, schema)
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: name, Description: description, InputSchema: cached, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: readOnly, IdempotentHint: !readOnly, OpenWorldHint: &f}}, func(ctx context.Context, req *mcp.CallToolRequest, in I) (*mcp.CallToolResult, any, error) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
 		out, err := handler(ctx, in)
 		return nil, out, safeError(err)
 	})

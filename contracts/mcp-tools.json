@@ -745,8 +745,6 @@
           },
           "required": [
             "id",
-            "title",
-            "severity",
             "cwe_ids",
             "affected_files",
             "summary",

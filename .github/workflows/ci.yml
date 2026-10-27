@@ -74,3 +74,4 @@ jobs:
           persist-credentials: false
       - run: docker build -t security-graph:check .
       - run: docker run --rm security-graph:check version
+      - run: ./scripts/container-integration.sh security-graph:check
