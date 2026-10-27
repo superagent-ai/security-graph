@@ -63,7 +63,7 @@ Ask your agent to register `acme/payments`, read its context, and record an asse
 create_asset → get_context → create_report → submit_finding → finish_report
 ```
 
-Every tool call requires an `intent` describing its purpose. The agent discovers the required inputs through MCP. Finding submissions currently require repository evidence, including code references, a PoC, and patch validation; see the [agent guide](docs/agent-guide.md).
+Every tool call requires an `intent` describing its purpose. The agent discovers the required inputs through MCP. Finding submissions currently require repository evidence, including code references, a PoC, and patch validation; see the [agent guide](AGENTS.md#using-security-graph).
 
 To stop the local service while keeping its data, run `docker compose down`.
 
@@ -75,7 +75,7 @@ To stop the local service while keeping its data, run `docker compose down`.
 
 ## More
 
-- [Agent guide: credentials, findings, and report lifecycle](docs/agent-guide.md)
+- [Agent guide: credentials, findings, and report lifecycle](AGENTS.md#using-security-graph)
 - [Development, integration tests, and releases](docs/development.md)
 - [Product and implementation plan](docs/product-and-implementation-plan.md)
 - [Finding/report compatibility](docs/source-compatibility.md)
