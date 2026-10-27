@@ -87,8 +87,8 @@ type Vulnerability struct {
 // Transport metadata (intent, idempotency, actor) never lives in this model.
 type Submission struct {
 	ID                    string             `json:"id"`
-	Title                 string             `json:"title"`
-	Severity              string             `json:"severity"`
+	Title                 string             `json:"title,omitempty"`
+	Severity              string             `json:"severity,omitempty"`
 	CWEIDs                []string           `json:"cwe_ids"`
 	AffectedFiles         []string           `json:"affected_files"`
 	Summary               string             `json:"summary"`
