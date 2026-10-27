@@ -6,8 +6,9 @@ suffix="${RANDOM}-${RANDOM}"
 network="security-graph-test-$suffix"
 database="security-graph-db-$suffix"
 service="security-graph-service-$suffix"
+stdio_service="${service}-stdio"
 cleanup() {
-  docker rm -f "$service" "$database" >/dev/null 2>&1 || true
+  docker rm -f "$service" "$stdio_service" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -41,3 +42,4 @@ docker run --rm --network "$network" -e DATABASE_URL="$database_url" "$image" re
 status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:$port/mcp" -H "Authorization: Bearer $graph_token" -H 'Content-Type: application/json' --data '{}')"
 if [[ "$status" != 401 ]]; then echo 'Revoked key was accepted by the container' >&2; exit 1; fi
 echo 'Container PostgreSQL, migration, authentication, MCP discovery, and revocation integration passed.'
+python3 "$(dirname "$0")/stdio-container-integration.py" "$image" "$network" "$database_url" "$stdio_service"

@@ -9,7 +9,7 @@ make integration
 make build
 ```
 
-**All tests are integration tests.** `make integration` starts a disposable real PostgreSQL container and exercises the real HTTP MCP endpoint. Alternatively set `TEST_DATABASE_URL` to a disposable database whose name contains `test`. It covers auth, mandatory intent, template validation, concurrent retries, lifecycle transitions, graph limits, tenant/asset isolation, and revocation. No production database or mocked store is used.
+**All tests are integration tests.** `make integration` starts a disposable real PostgreSQL container and exercises the real HTTP MCP endpoint. Alternatively set `TEST_DATABASE_URL` to a disposable database whose name contains `test`. It covers authenticated HTTP and real CLI subprocesses over stdio, including mandatory intent, template validation, idempotent retries, lifecycle transitions, persistence across restarts, tenant/asset/scope isolation, and shutdown. No production database or mocked store is used.
 
 Regenerate public schemas after changing a tool or contract:
 

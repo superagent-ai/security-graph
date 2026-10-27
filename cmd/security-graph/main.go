@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/superagent-ai/security-graph/internal/engine"
 	"github.com/superagent-ai/security-graph/internal/server"
 	"github.com/superagent-ai/security-graph/pkg/postgres"
@@ -31,7 +33,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: security-graph serve|migrate|issue-key|revoke-key|version")
+		return fmt.Errorf("usage: security-graph serve|stdio|migrate|issue-key|revoke-key|version")
 	}
 	if os.Args[1] == "version" {
 		fmt.Println(version)
@@ -39,6 +41,19 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	var local storage.Principal
+	if os.Args[1] == "stdio" {
+		// Stdio trusts the operator launching the process, never MCP client input.
+		// Native App access must continue through its existing API-key auth.
+		if os.Getenv("STORAGE_BACKEND") == "superagent" {
+			return fmt.Errorf("stdio supports standalone storage only; use authenticated HTTP for native Superagent access")
+		}
+		var err error
+		local, err = stdioPrincipal(os.Args[2:])
+		if err != nil {
+			return err
+		}
+	}
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		return fmt.Errorf("DATABASE_URL is required")
@@ -61,6 +76,12 @@ func run() error {
 		}
 	}
 	switch os.Args[1] {
+	case "stdio":
+		err := server.NewMCP(&engine.Engine{Store: store}, local, version).Run(ctx, &mcp.StdioTransport{MaxLineLength: 1 << 20})
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			return nil
+		}
+		return err
 	case "migrate":
 		return store.Migrate(ctx)
 	case "issue-key":
