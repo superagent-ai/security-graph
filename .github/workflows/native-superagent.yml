@@ -32,6 +32,8 @@ jobs:
       GITHUB_CLIENT_SECRET: local-ci-placeholder
       GOOGLE_CLIENT_ID: local-ci-placeholder
       GOOGLE_CLIENT_SECRET: local-ci-placeholder
+      # Local auth fixture only; no production provider credentials.
+      SUPABASE_SEND_EMAIL_HOOK_SECRET: v1,whsec_bmF0aXZlLWludGVncmF0aW9uLWZpeHR1cmUtb25seSEh
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -69,7 +71,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP/supabase-bin" supabase supabase-go
           echo "$RUNNER_TEMP/supabase-bin" >> "$GITHUB_PATH"
       - name: Start real local Supabase and apply app migrations
-        run: supabase start --exclude analytics,studio,imgproxy,edge-runtime,vector
+        run: supabase start --exclude logflare,studio,imgproxy,edge-runtime,vector
       - name: Run native integration
         run: |
           supabase status --output env > "$RUNNER_TEMP/supabase.env"

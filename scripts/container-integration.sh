@@ -15,7 +15,7 @@ docker network create "$network" >/dev/null
 docker run --detach --name "$database" --network "$network" \
   -e POSTGRES_PASSWORD=integration-only -e POSTGRES_DB=security_graph_test postgres:17-alpine >/dev/null
 for attempt in {1..60}; do
-  if docker exec "$database" pg_isready -U postgres -d security_graph_test >/dev/null 2>&1; then break; fi
+  if docker exec "$database" pg_isready -h 127.0.0.1 -U postgres -d security_graph_test >/dev/null 2>&1; then break; fi
   if [[ "$attempt" == 60 ]]; then echo 'PostgreSQL did not start' >&2; exit 1; fi
   sleep 1
 done
