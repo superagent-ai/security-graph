@@ -66,7 +66,7 @@ jobs:
           curl -fsSL https://github.com/supabase/cli/releases/download/v2.105.0/supabase_2.105.0_linux_amd64.tar.gz -o "$RUNNER_TEMP/supabase.tar.gz"
           echo "11ac4410c11e8b03f0cc7fd9316d68146695b0e06115a0663364b07e7feb6db8  $RUNNER_TEMP/supabase.tar.gz" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/supabase-bin"
-          tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP/supabase-bin" supabase
+          tar -xzf "$RUNNER_TEMP/supabase.tar.gz" -C "$RUNNER_TEMP/supabase-bin" supabase supabase-go
           echo "$RUNNER_TEMP/supabase-bin" >> "$GITHUB_PATH"
       - name: Start real local Supabase and apply app migrations
         run: supabase start --exclude analytics,studio,imgproxy,edge-runtime,vector
