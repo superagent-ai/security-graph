@@ -231,13 +231,14 @@ type Finding struct {
 	Submission  Submission `json:"submission"`
 }
 type Report struct {
-	ID          string `json:"id"`
-	Object      string `json:"object"`
-	Type        string `json:"type"`
-	Target      string `json:"target"`
-	Source      string `json:"source"`
-	Status      string `json:"status"`
-	AgentStatus string `json:"agent_status"`
+	EngagementMode string `json:"engagement_mode,omitempty"`
+	ID             string `json:"id"`
+	Object         string `json:"object"`
+	Type           string `json:"type"`
+	Target         string `json:"target"`
+	Source         string `json:"source"`
+	Status         string `json:"status"`
+	AgentStatus    string `json:"agent_status"`
 }
 
 func ValidReportType(v string) bool { return oneOf(v, "repository", "web_app", "agent", "package") }

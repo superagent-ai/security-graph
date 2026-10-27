@@ -18,6 +18,7 @@ import (
 	"github.com/superagent-ai/security-graph/internal/server"
 	"github.com/superagent-ai/security-graph/pkg/postgres"
 	"github.com/superagent-ai/security-graph/pkg/storage"
+	"github.com/superagent-ai/security-graph/pkg/superagent"
 )
 
 var version = "dev"
@@ -47,6 +48,18 @@ func run() error {
 		return fmt.Errorf("database connection failed")
 	}
 	defer store.Close()
+	backend := os.Getenv("STORAGE_BACKEND")
+	if backend != "" && backend != "postgres" && backend != "superagent" {
+		return fmt.Errorf("STORAGE_BACKEND must be postgres or superagent")
+	}
+	if backend == "superagent" && (os.Args[1] == "issue-key" || os.Args[1] == "revoke-key") {
+		return fmt.Errorf("manage native API keys through the Superagent app Settings")
+	}
+	if backend == "superagent" && os.Args[1] == "serve" {
+		if err = superagent.Enable(ctx, store); err != nil {
+			return err
+		}
+	}
 	switch os.Args[1] {
 	case "migrate":
 		return store.Migrate(ctx)

@@ -13,7 +13,21 @@ Shared security context for your agents. A Go service exposing authenticated MCP
 - A public storage adapter interface and exported language-neutral tool schemas.
 - Docker Compose for on-prem, integration CI, and tag-triggered binary/container releases.
 
-This is the initial implementation, not a completed hosted release. The native app adapter, hosted Settings integration, non-repository submission profiles, investigation-result history, consistent full snapshot exports, and the optional hosted/on-prem connector remain implementation milestones. The current PostgreSQL adapter stores standalone records in `security_graph`; it does not yet read or mutate the existing app's public finding/report tables. Do not deploy it as a replacement for the hosted MCP endpoint until the native adapter passes end-to-end checks.
+Two storage modes use the same engine and finding template. The standalone PostgreSQL mode stores its own records for on-prem deployments. `STORAGE_BACKEND=superagent` reads and writes the app's existing finding/report tables and authenticates existing organization API keys. Its real app → MCP → PostgreSQL integration has passed locally. Production activation requires the additive app migration and the service configuration below. Non-repository authoring profiles, investigation-result history, full snapshot exports, and the optional hosted/on-prem connector remain milestones.
+
+## Native Superagent app
+
+Apply the app's `security_graph_native_integration` migration to its existing database. Run this service with:
+
+```sh
+STORAGE_BACKEND=superagent DATABASE_URL="$SUPERAGENT_DATABASE_URL" ./security-graph serve
+```
+
+Set `SECURITY_GRAPH_URL` in the app to the service's private `/mcp` URL. Keep the app's existing `CRON_SECRET` configured for durable notification retries. Use a direct or session-pooled PostgreSQL connection with the permissions described in [native integration](docs/superagent-integration.md).
+
+Agents keep connecting to `https://www.superagent.sh/mcp` using their existing `SUPERAGENT_API_KEY`. The key determines the organization. No organization field, header, separate key, import, or synchronization step is needed. These existing keys retain their current organization-wide permissions; the standalone scoped-key grants below do not narrow app keys. Delete the key in Settings to revoke it.
+
+When enabled, the app advertises MCP version 2 and requires `intent` on all tools. Graph mutations also require idempotency keys and current versions. The app retains existing scan, runtime, and incident tools. Its finding/report detail tools use the existing public app serializers.
 
 ## Why Go
 
@@ -66,7 +80,7 @@ Revoke every credential for an agent:
 docker compose run --rm server revoke-key --org acme --actor pr-review-agent
 ```
 
-Authentication currently uses deployment-issued bearer keys. OAuth/OIDC federation and native app-issued credentials require additional integration; the service does not accept arbitrary browser session tokens.
+Standalone authentication uses deployment-issued bearer keys. Native mode uses existing app API keys. Neither mode accepts arbitrary browser session tokens; OAuth/OIDC federation is a future integration.
 
 ## Agent workflow
 

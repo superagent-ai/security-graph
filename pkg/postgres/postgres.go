@@ -21,7 +21,10 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-type Store struct{ Pool *pgxpool.Pool }
+type Store struct {
+	Pool   *pgxpool.Pool
+	Native Native
+}
 
 func Open(ctx context.Context, url string) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(url)
@@ -82,9 +85,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 }
 
 type transaction struct {
-	tx   pgx.Tx
-	p    storage.Principal
-	call storage.Call
+	native Native
+	tx     pgx.Tx
+	p      storage.Principal
+	call   storage.Call
 }
 
 func (s *Store) View(ctx context.Context, p storage.Principal, f func(storage.Reader) error) error {
@@ -93,7 +97,7 @@ func (s *Store) View(ctx context.Context, p storage.Principal, f func(storage.Re
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = f(&transaction{tx: tx, p: p}); err != nil {
+	if err = f(&transaction{tx: tx, p: p, native: s.Native}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -122,7 +126,7 @@ func (s *Store) Update(ctx context.Context, p storage.Principal, c storage.Call,
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
-	result, err := f(&transaction{tx: tx, p: p, call: c})
+	result, err := f(&transaction{tx: tx, p: p, call: c, native: s.Native})
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +152,13 @@ const visible = ` AND (entities.kind <> 'relationship' OR
   (EXISTS(SELECT 1 FROM security_graph.entities src WHERE src.organization_id=entities.organization_id AND src.id=entities.data->>'source_id' AND ($VIS OR src.asset_id=ANY($ASSETS::text[])))
    AND EXISTS(SELECT 1 FROM security_graph.entities dst WHERE dst.organization_id=entities.organization_id AND dst.id=entities.data->>'target_id' AND ($VIS OR dst.asset_id=ANY($ASSETS::text[])))))`
 
-func visibility(all, assets string) string {
-	return strings.NewReplacer("$VIS", all, "$ASSETS", assets).Replace(visible)
+func (t *transaction) visibility(all, assets string) string {
+	v := visible
+	if t.native != nil {
+		v = strings.ReplaceAll(v, "security_graph.entities src", "(SELECT organization_id,id,asset_id FROM security_graph.entities UNION ALL SELECT organization_id,id,asset_id FROM security_graph.app_records) src")
+		v = strings.ReplaceAll(v, "security_graph.entities dst", "(SELECT organization_id,id,asset_id FROM security_graph.entities UNION ALL SELECT organization_id,id,asset_id FROM security_graph.app_records) dst")
+	}
+	return strings.NewReplacer("$VIS", all, "$ASSETS", assets).Replace(v)
 }
 
 func scan(row pgx.Row) (r storage.Record, err error) {
@@ -160,13 +169,22 @@ func scan(row pgx.Row) (r storage.Record, err error) {
 	return
 }
 func (t *transaction) Get(ctx context.Context, id string) (storage.Record, error) {
-	return scan(t.tx.QueryRow(ctx, "SELECT "+cols+" FROM security_graph.entities WHERE organization_id=$1 AND id=$2 AND ($3 OR asset_id=ANY($4::text[]))"+visibility("$3", "$4"), t.p.OrganizationID, id, t.p.AllAssets, t.p.AssetIDs))
+	if t.native != nil {
+		r, err := t.native.Get(ctx, t.tx, t.p, id)
+		if !errors.Is(err, storage.ErrNotFound) {
+			return r, err
+		}
+	}
+	return scan(t.tx.QueryRow(ctx, "SELECT "+cols+" FROM security_graph.entities WHERE organization_id=$1 AND id=$2 AND ($3 OR asset_id=ANY($4::text[]))"+t.visibility("$3", "$4"), t.p.OrganizationID, id, t.p.AllAssets, t.p.AssetIDs))
 }
 func (t *transaction) List(ctx context.Context, q storage.Query) ([]storage.Record, error) {
 	if q.Limit < 1 || q.Limit > 201 {
 		return nil, fmt.Errorf("limit must be between 1 and 201")
 	}
-	rows, err := t.tx.Query(ctx, "SELECT "+cols+" FROM security_graph.entities WHERE organization_id=$1 AND ($2 OR asset_id=ANY($3::text[])) AND ($4='' OR kind=$4) AND ($5='' OR report_id=$5) AND ($6='' OR asset_id=$6) AND id>$7 AND ($8='' OR strpos(lower(data::text),lower($8))>0) AND ($10::text[] IS NULL OR data->>'source_id'=ANY($10::text[]) OR data->>'target_id'=ANY($10::text[]))"+visibility("$2", "$3")+" ORDER BY id LIMIT $9", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, q.Kind, q.ReportID, q.AssetID, q.After, q.Search, q.Limit, q.ConnectedTo)
+	if t.native != nil {
+		return t.native.List(ctx, t.tx, t.p, q)
+	}
+	rows, err := t.tx.Query(ctx, "SELECT "+cols+" FROM security_graph.entities WHERE organization_id=$1 AND ($2 OR asset_id=ANY($3::text[])) AND ($4='' OR kind=$4) AND ($5='' OR report_id=$5) AND ($6='' OR asset_id=$6) AND id>$7 AND ($8='' OR strpos(lower(data::text),lower($8))>0) AND ($10::text[] IS NULL OR data->>'source_id'=ANY($10::text[]) OR data->>'target_id'=ANY($10::text[]))"+t.visibility("$2", "$3")+" AND ($11='' OR data->>'kind'=$11) AND ($12='' OR data->'triage'->>'status'=$12) AND ($13='' OR data->>'type'=$13) AND ($14='' OR data->>'status'=$14) ORDER BY id LIMIT $9 OFFSET $15", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, q.Kind, q.ReportID, q.AssetID, q.After, q.Search, q.Limit, q.ConnectedTo, q.FindingKind, q.TriageStatus, q.ReportType, q.Status, q.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +205,13 @@ func (t *transaction) Put(ctx context.Context, r storage.Record, expected int64)
 	}
 	if r.ID == "" || r.AssetID == "" {
 		return r, fmt.Errorf("id and asset_id required")
+	}
+	if t.native != nil && (r.Kind == "finding" || r.Kind == "report") {
+		saved, err := t.native.Put(ctx, t.tx, t.p, r, expected)
+		if err != nil {
+			return r, err
+		}
+		return saved, t.audit(ctx, saved)
 	}
 	old, err := t.Get(ctx, r.ID)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -209,15 +234,23 @@ func (t *transaction) Put(ctx context.Context, r storage.Record, expected int64)
 	if err != nil {
 		return r, err
 	}
+	return r, t.audit(ctx, r)
+}
+
+func (t *transaction) audit(ctx context.Context, r storage.Record) error {
 	h := sha256.Sum256([]byte(t.call.Intent))
-	_, err = t.tx.Exec(ctx, "INSERT INTO security_graph.changes(organization_id,asset_id,entity_id,kind,version,actor_id,operation,intent_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", t.p.OrganizationID, r.AssetID, r.ID, r.Kind, r.Version, t.p.ActorID, t.call.Operation, hex.EncodeToString(h[:]))
-	return r, err
+	_, err := t.tx.Exec(ctx, "INSERT INTO security_graph.changes(organization_id,asset_id,entity_id,kind,version,actor_id,operation,intent_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", t.p.OrganizationID, r.AssetID, r.ID, r.Kind, r.Version, t.p.ActorID, t.call.Operation, hex.EncodeToString(h[:]))
+	return err
 }
 func (t *transaction) Changes(ctx context.Context, after int64, limit int) ([]storage.Change, error) {
 	if limit < 1 || limit > 200 {
 		return nil, fmt.Errorf("invalid limit")
 	}
-	rows, err := t.tx.Query(ctx, "SELECT c.cursor,c.entity_id,c.kind,c.version,c.actor_id,c.created_at FROM security_graph.changes c JOIN security_graph.entities ON entities.organization_id=c.organization_id AND entities.id=c.entity_id WHERE c.organization_id=$1 AND ($2 OR c.asset_id=ANY($3::text[])) AND c.cursor>$4"+visibility("$2", "$3")+" ORDER BY c.cursor LIMIT $5", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, after, limit)
+	source := "security_graph.entities"
+	if t.native != nil {
+		source = "(SELECT organization_id,id,asset_id,kind,data FROM security_graph.app_records UNION ALL SELECT organization_id,id,asset_id,kind,data FROM security_graph.entities e WHERE NOT EXISTS(SELECT 1 FROM security_graph.app_records n WHERE n.organization_id=e.organization_id AND n.id=e.id))"
+	}
+	rows, err := t.tx.Query(ctx, "SELECT c.cursor,c.entity_id,c.kind,c.version,c.actor_id,c.created_at FROM security_graph.changes c JOIN "+source+" entities ON entities.organization_id=c.organization_id AND entities.id=c.entity_id WHERE c.organization_id=$1 AND ($2 OR c.asset_id=ANY($3::text[])) AND c.cursor>$4"+t.visibility("$2", "$3")+" ORDER BY c.cursor LIMIT $5", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +267,9 @@ func (t *transaction) Changes(ctx context.Context, after int64, limit int) ([]st
 }
 
 func (s *Store) Authenticate(ctx context.Context, token string) (storage.Principal, error) {
+	if s.Native != nil {
+		return s.Native.Authenticate(ctx, s, token)
+	}
 	var p storage.Principal
 	h := sha256.Sum256([]byte(token))
 	err := s.Pool.QueryRow(ctx, "SELECT organization_id,actor_id,scopes,asset_ids,all_assets FROM security_graph.credentials WHERE key_hash=$1 AND revoked_at IS NULL AND expires_at>now()", hex.EncodeToString(h[:])).Scan(&p.OrganizationID, &p.ActorID, &p.Scopes, &p.AssetIDs, &p.AllAssets)

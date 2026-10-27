@@ -111,10 +111,15 @@ type GetInput struct {
 }
 type ListInput struct {
 	engine.Call
-	AssetID string `json:"asset_id,omitempty"`
-	Limit   int    `json:"limit,omitempty"`
-	After   string `json:"after,omitempty"`
-	Search  string `json:"search,omitempty"`
+	AssetID      string `json:"asset_id,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+	After        string `json:"after,omitempty"`
+	Search       string `json:"search,omitempty"`
+	FindingKind  string `json:"kind,omitempty"`
+	TriageStatus string `json:"triage_status,omitempty"`
+	ReportType   string `json:"type,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Offset       int    `json:"offset,omitempty"`
 }
 type ContextInput struct {
 	engine.Call
@@ -146,7 +151,7 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 	for _, entry := range []struct{ name, kind string }{{"list_findings", "finding"}, {"list_reports", "report"}, {"list_assets", "asset"}} {
 		kind := entry.kind
 		add(s, entry.name, "List authorized "+kind+" records with stable ID pagination. Default limit 25; maximum 100.", true, func(ctx context.Context, in ListInput) ([]storage.Record, error) {
-			return e.List(ctx, p, in.Intent, storage.Query{Kind: kind, AssetID: in.AssetID, Limit: in.Limit, After: in.After, Search: in.Search})
+			return e.List(ctx, p, in.Intent, storage.Query{Kind: kind, AssetID: in.AssetID, Limit: in.Limit, After: in.After, Search: in.Search, FindingKind: in.FindingKind, TriageStatus: in.TriageStatus, ReportType: in.ReportType, Status: in.Status, Offset: in.Offset})
 		})
 	}
 	add(s, "get_context", "Retrieve an authorized graph neighborhood. Depth 0 to 3, limit 1 to 100; returns provenance and truncation.", true, func(ctx context.Context, in ContextInput) (engine.ContextResult, error) {

@@ -76,7 +76,7 @@ func (e *Engine) List(ctx context.Context, p storage.Principal, intent string, q
 	if q.Limit == 0 {
 		q.Limit = 25
 	}
-	if q.Limit < 1 || q.Limit > 100 || len(q.Search) > 500 {
+	if q.Limit < 1 || q.Limit > 100 || len(q.Search) > 500 || q.Offset < 0 || q.Offset > 10000 || (q.After != "" && q.Offset != 0) {
 		return nil, fmt.Errorf("%w: limit must be 1 to 100; search at most 500 characters", contracts.ErrInvalid)
 	}
 	err = e.Store.View(ctx, p, func(tx storage.Reader) error { var er error; out, er = tx.List(ctx, q); return er })
@@ -163,6 +163,18 @@ func (e *Engine) SubmitFinding(ctx context.Context, p storage.Principal, a Submi
 			return nil, err
 		}
 		if report.Status == "completed" || report.Status == "done" {
+			// Native database triggers may already have reopened this report.
+			r, err = tx.Get(ctx, r.ID)
+			if err != nil {
+				return nil, err
+			}
+			report, err = decode[contracts.Report](r, "report")
+			if err != nil {
+				return nil, err
+			}
+			if report.Status == "in_review" {
+				return saved, nil
+			}
 			report.Status = "in_review"
 			r.Data = data(report)
 			if _, err = tx.Put(ctx, r, r.Version); err != nil {
@@ -207,6 +219,9 @@ func (e *Engine) UpdateFinding(ctx context.Context, p storage.Principal, a Updat
 		if err != nil {
 			return nil, err
 		}
+		if f.Kind == "github_advisory" {
+			return saved, nil
+		}
 		if err = e.syncReport(ctx, tx, f.ReportID); err != nil {
 			return nil, err
 		}
@@ -222,7 +237,7 @@ func (e *Engine) syncReport(ctx context.Context, tx storage.Transaction, id stri
 	if err != nil {
 		return err
 	}
-	if report.AgentStatus != "completed" && report.AgentStatus != "review" {
+	if (report.Status != "in_review" && report.Status != "completed" && report.Status != "done") || (report.AgentStatus != "completed" && report.AgentStatus != "review" && report.EngagementMode != "manual") {
 		return nil
 	}
 	status := "completed"
@@ -291,7 +306,7 @@ func (e *Engine) ReportStatus(ctx context.Context, p storage.Principal, a Report
 				report.AgentStatus = "completed"
 			}
 		} else {
-			if (report.AgentStatus != "completed" && report.AgentStatus != "review") || (a.Status != "completed" && a.Status != "in_review") {
+			if (report.Status != "completed" && report.Status != "in_review" && report.Status != "done") || (report.AgentStatus != "completed" && report.AgentStatus != "review" && report.EngagementMode != "manual") || (a.Status != "completed" && a.Status != "in_review") {
 				return nil, storage.ErrConflict
 			}
 			report.Status = a.Status
