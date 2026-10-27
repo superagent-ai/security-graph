@@ -42,7 +42,7 @@ This example grants access to one asset, `acme/payments`, for 24 hours:
 docker compose run --rm server issue-key \
   --org acme --actor local-agent \
   --assets acme/payments \
-  --scopes read,submit,graph:write,disposition \
+  --scopes read,submit,graph:write \
   --ttl 24h
 ```
 
