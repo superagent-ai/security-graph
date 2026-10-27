@@ -27,6 +27,8 @@ jobs:
       run:
         working-directory: .superagent-app-ci
     env:
+      # Use the official Docker Hub images; public ECR has a shared data quota.
+      SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
       TURNSTILE_SECRET_KEY: local-ci-placeholder
       GITHUB_CLIENT_ID: local-ci-placeholder
       GITHUB_CLIENT_SECRET: local-ci-placeholder
