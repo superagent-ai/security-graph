@@ -18,7 +18,7 @@ Your agent performs the security assessment. Security Graph stores and shares th
 
 You'll need Docker with Compose and a checkout of this repository.
 
-### 1. Start the service
+### 1. Prepare the local database
 
 Copy the example configuration:
 
@@ -26,36 +26,35 @@ Copy the example configuration:
 cp .env.example .env
 ```
 
-Set a long password in `.env`, using the same password for `POSTGRES_PASSWORD` and `DATABASE_URL` (URL-encoded in the URL if needed). Then start:
+Set a long password in `.env`, using the same password for `POSTGRES_PASSWORD` and `DATABASE_URL` (URL-encoded in the URL if needed). Then build the service and prepare PostgreSQL:
 
 ```sh
-docker compose up --build -d
+docker compose build
+docker compose run --rm migrate
 ```
 
-This starts PostgreSQL, applies migrations, and serves MCP at **http://127.0.0.1:8080/mcp**. The graph starts empty; data persists across restarts.
+The database starts empty and retains data across restarts. You only need to prepare it once; rebuild and rerun migrations when upgrading.
 
-### 2. Create an agent key
+### 2. Connect your agent
 
-This example grants access to one asset, `acme/payments`, for 24 hours:
+Add this **stdio MCP server** to your agent's configuration, replacing both paths with your checkout location:
 
-```sh
-docker compose run --rm server issue-key \
-  --org acme --actor local-agent \
-  --assets acme/payments \
-  --scopes read,submit,graph:write \
-  --ttl 24h
+```json
+{
+  "mcpServers": {
+    "security-graph": {
+      "command": "docker",
+      "args": [
+        "compose", "--project-directory", "/absolute/path/to/security-graph",
+        "--env-file", "/absolute/path/to/security-graph/.env",
+        "run", "--rm", "--no-deps", "-T", "server", "stdio"
+      ]
+    }
+  }
+}
 ```
 
-Save the printed key in your agent's secret configuration.
-
-### 3. Connect your agent
-
-Add an HTTP MCP server in your agent's settings:
-
-| Setting | Value |
-| --- | --- |
-| URL | `http://127.0.0.1:8080/mcp` |
-| Authorization header | `Bearer <your-agent-key>` |
+Your agent launches the Go process and communicates through its input/output streams. No MCP API key, login, or HTTP endpoint is needed. The process has assessment permissions in a local workspace; advanced access settings are in [AGENTS.md](AGENTS.md#using-security-graph).
 
 Ask your agent to register `acme/payments`, read its context, and record an assessment. The usual tool sequence is:
 
@@ -65,11 +64,11 @@ create_asset → get_context → create_report → submit_finding → finish_rep
 
 Every tool call requires an `intent` describing its purpose. The agent discovers the required inputs through MCP. Finding submissions currently require repository evidence, including code references, a PoC, and patch validation; see the [agent guide](AGENTS.md#using-security-graph).
 
-To stop the local service while keeping its data, run `docker compose down`.
+The MCP process exits when your agent disconnects. To stop PostgreSQL while keeping its data, run `docker compose down`.
 
 ## Use it with your infrastructure
 
-**Standalone / on-prem:** Run the same service against your own PostgreSQL database. Put it behind HTTPS for remote access. Other databases can be supported through the [storage adapter interface](docs/storage-adapters.md).
+**Standalone / on-prem:** Run the same service against your own PostgreSQL database. For shared remote access, use authenticated HTTP behind HTTPS; see [HTTP credentials](AGENTS.md#http-credentials-and-client-configuration). Other databases can be supported through the [storage adapter interface](docs/storage-adapters.md).
 
 **Native Superagent:** Run the service against the existing App database and configure App to forward MCP calls to it. Agents use their existing Superagent API keys; organization access comes from the key. This requires the App migration and service configuration described in the [native integration guide](docs/superagent-integration.md).
 

@@ -20,9 +20,29 @@ Build the shared security context engine in Go. Preserve the finding/report mode
 
 ## Using Security Graph
 
-Start with the [local quickstart](README.md#run-locally). This guide covers credentials, finding requirements, and report transitions.
+Start with the [local quickstart](README.md#run-locally). This guide covers local access, HTTP credentials, finding requirements, and report transitions.
 
-### Credentials and client configuration
+### Local stdio access
+
+`security-graph stdio` uses the same tool registry and storage engine over stdin/stdout. The agent launches it as a subprocess; stdout contains MCP messages only, and diagnostics use stderr. Closing stdin shuts it down. Configure `DATABASE_URL` and apply standalone migrations before launching it.
+
+The process defaults to organization `local`, actor `local-agent`, all assets within that organization, and scopes `read,submit,graph:write`. No API key is created or exchanged. Trust comes from the operator launching the process with database access; MCP arguments and client metadata cannot select its organization or expand its permissions.
+
+Operators can set `--org`, `--actor`, `--assets`, and `--scopes` on the `stdio` command. For example, a review process can explicitly opt into `--scopes read,disposition`. These are trusted launch settings, not MCP tool arguments. Only standalone storage supports stdio; `STORAGE_BACKEND=superagent` must use authenticated HTTP.
+
+The README's Docker configuration uses `-T` to preserve stdio framing and `--no-deps` because the database has already been prepared. It publishes no MCP port. Database credentials remain in the gitignored `.env` file.
+
+### HTTP credentials and client configuration
+
+Use `docker compose up --build -d` to start the HTTP service at `http://127.0.0.1:8080/mcp`. HTTP always requires a bearer key, including on localhost. For standalone HTTP, issue a scoped assessment key:
+
+```sh
+docker compose run --rm server issue-key \
+  --org acme --actor local-agent \
+  --assets acme/payments \
+  --scopes read,submit,graph:write \
+  --ttl 24h
+```
 
 The key is printed once; only its SHA-256 hash is stored. Put it into your MCP client's secret configuration or environment. An operator can explicitly grant `--all-assets` when organization-wide access is intended. `disposition` is required to resolve findings or change report review state; `export` is required for the change feed.
 
@@ -49,7 +69,7 @@ Revoke every credential for an agent:
 docker compose run --rm server revoke-key --org acme --actor local-agent
 ```
 
-Standalone authentication uses deployment-issued bearer keys. Native mode uses existing app API keys. Neither mode accepts arbitrary browser session tokens; OAuth/OIDC federation is a future integration.
+Standalone HTTP authentication uses deployment-issued bearer keys. Native mode uses existing app API keys. Neither mode accepts arbitrary browser session tokens; OAuth/OIDC federation is a future integration.
 
 ### Agent workflow
 
