@@ -22,7 +22,7 @@ try {
     const heading = line.match(/^\s*\[([^\]]+)\]\s*(?:#.*)?$/);
     if (heading) section = heading[1];
     if (!section && /^project_id\s*=/.test(line)) {
-      line = `project_id = "security-graph-ci-${randomUUID()}"`;
+      line = `project_id = "sg-ci-${randomUUID().replaceAll('-', '')}"`;
       projectFound = true;
     }
     const setting = line.match(/^(\s*(\w+)\s*=\s*)\d+(\s*(?:#.*)?)$/);
