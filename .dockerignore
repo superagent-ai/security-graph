@@ -1,0 +1,6 @@
+.git
+.env*
+credentials.json
+bin
+dist
+coverage.out

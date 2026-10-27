@@ -1,0 +1,882 @@
+[
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Link two authorized entities with relationship type and provenance. Requires graph:write permission.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "relationship": {
+          "additionalProperties": false,
+          "properties": {
+            "provenance": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            },
+            "target_id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_id",
+            "type",
+            "target_id",
+            "provenance"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "relationship"
+      ],
+      "type": "object"
+    },
+    "name": "add_relationship"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Register an asset under authorized asset access. Requires graph:write permission.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "asset_id",
+        "name",
+        "type",
+        "locator"
+      ],
+      "type": "object"
+    },
+    "name": "create_asset"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Start an external assessment report for a registered asset. Does not launch a Superagent scan.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "asset_id",
+        "type",
+        "target"
+      ],
+      "type": "object"
+    },
+    "name": "create_report"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Record external assessment execution as succeeded or failed. Successful empty/resolved reports complete automatically; unresolved findings enter review.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "report_id",
+        "expected_version",
+        "status"
+      ],
+      "type": "object"
+    },
+    "name": "finish_report"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Retrieve an authorized graph neighborhood. Depth 0 to 3, limit 1 to 100; returns provenance and truncation.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "type": "integer"
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent",
+        "entity_id",
+        "depth",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "name": "get_context"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one authorized finding including current version and full structured content.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "type": "string"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "get_finding"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one authorized report including current version and full structured content.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "type": "string"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "get_report"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List authorized asset records with stable ID pagination. Default limit 25; maximum 100.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "search": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "list_assets"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the scoped durable change feed after a cursor. Requires export permission; maximum 100 records.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "integer"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent",
+        "after",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "name": "list_changes"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List authorized finding records with stable ID pagination. Default limit 25; maximum 100.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "search": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "list_findings"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List authorized report records with stable ID pagination. Default limit 25; maximum 100.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        },
+        "search": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "list_reports"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Persist a finding using the existing structured repository report template, code references, policy verification, PoC and validated patch evidence. Retained as an attributed claim with triage status new.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "finding": {
+          "additionalProperties": false,
+          "properties": {
+            "affected_files": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "code_references": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "excerpt": {
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "line_end": {
+                    "type": "integer"
+                  },
+                  "line_start": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file",
+                  "line_start",
+                  "line_end",
+                  "excerpt",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "cwe_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "details": {
+              "type": "string"
+            },
+            "exploit_preconditions": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "false_positive_analysis": {
+              "type": "string"
+            },
+            "github_advisory": {
+              "additionalProperties": false,
+              "properties": {
+                "cwe_ids": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "severity": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "vulnerabilities": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "package": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "ecosystem": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ecosystem",
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "patched_versions": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": [
+                          "null",
+                          "array"
+                        ]
+                      },
+                      "vulnerable_functions": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": [
+                          "null",
+                          "array"
+                        ]
+                      },
+                      "vulnerable_version_range": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "package",
+                      "vulnerable_version_range"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                }
+              },
+              "required": [
+                "summary",
+                "description",
+                "severity",
+                "cwe_ids",
+                "vulnerabilities"
+              ],
+              "type": "object"
+            },
+            "id": {
+              "type": "string"
+            },
+            "impact": {
+              "type": "string"
+            },
+            "policy_verification": {
+              "additionalProperties": false,
+              "properties": {
+                "conclusion": {
+                  "type": "string"
+                },
+                "contradicted_by_policy": {
+                  "type": "boolean"
+                },
+                "docs_reviewed": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "file": {
+                        "type": "string"
+                      },
+                      "interpretation": {
+                        "type": "string"
+                      },
+                      "relevant_excerpt": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "file",
+                      "relevant_excerpt",
+                      "interpretation"
+                    ],
+                    "type": "object"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "documented_intended_behavior": {
+                  "type": "boolean"
+                },
+                "in_scope": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "docs_reviewed",
+                "in_scope",
+                "contradicted_by_policy",
+                "documented_intended_behavior",
+                "conclusion"
+              ],
+              "type": "object"
+            },
+            "proof": {
+              "type": "string"
+            },
+            "proposed_patch": {
+              "additionalProperties": false,
+              "properties": {
+                "diff": {
+                  "type": "string"
+                },
+                "files": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": [
+                    "null",
+                    "array"
+                  ]
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "validation": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "tests": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "command": {
+                            "type": "string"
+                          },
+                          "result": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "command",
+                          "result"
+                        ],
+                        "type": "object"
+                      },
+                      "type": [
+                        "null",
+                        "array"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tests"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "summary",
+                "diff",
+                "files",
+                "validation"
+              ],
+              "type": "object"
+            },
+            "remediation": {
+              "type": "string"
+            },
+            "reproduction_steps": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "null",
+                "array"
+              ]
+            },
+            "severity": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "severity",
+            "cwe_ids",
+            "affected_files",
+            "summary",
+            "impact",
+            "details",
+            "proof",
+            "exploit_preconditions",
+            "reproduction_steps",
+            "policy_verification",
+            "false_positive_analysis",
+            "code_references",
+            "remediation",
+            "proposed_patch",
+            "github_advisory"
+          ],
+          "type": "object"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "report_id",
+        "finding"
+      ],
+      "type": "object"
+    },
+    "name": "submit_finding"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Update a finding to new, in_review or resolved. Resolving requires fixed, accepted_risk, false_positive or wont_fix. Requires disposition permission and current version.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "type": "integer"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "triage_resolution": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "triage_status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "finding_id",
+        "expected_version",
+        "triage_status"
+      ],
+      "type": "object"
+    },
+    "name": "update_finding_triage"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Change successfully finished report review to completed or in_review. Completing review does not resolve findings.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "type": "integer"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "report_id",
+        "expected_version",
+        "status"
+      ],
+      "type": "object"
+    },
+    "name": "update_report_review_status"
+  }
+]
