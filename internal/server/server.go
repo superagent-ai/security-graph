@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -99,6 +100,17 @@ func add[I any, O any](s *mcp.Server, name, description string, readOnly bool, h
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		out, err := handler(ctx, in)
+		if err == nil && req.ProtocolVersion() < "2026-07-28" {
+			encoded, marshalErr := json.Marshal(out)
+			if marshalErr != nil {
+				return nil, nil, safeError(marshalErr)
+			}
+			// Pre-SEP-2106 clients only accept objects in structuredContent.
+			// Keep the original JSON payload in the standard text fallback.
+			if len(encoded) > 0 && encoded[0] != '{' {
+				return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}}}, nil, nil
+			}
+		}
 		return nil, out, safeError(err)
 	})
 }

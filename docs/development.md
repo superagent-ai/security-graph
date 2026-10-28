@@ -11,6 +11,8 @@ make build
 
 **All tests are integration tests.** `make integration` starts a disposable real PostgreSQL container and exercises the real HTTP MCP endpoint. Alternatively set `TEST_DATABASE_URL` to a disposable database whose name contains `test`. It covers authenticated HTTP and real CLI subprocesses over stdio, including mandatory intent, template validation, idempotent retries, lifecycle transitions, persistence across restarts, tenant/asset/scope isolation, and shutdown. No production database or mocked store is used.
 
+MCP 2026-07-28 clients receive list results as arrays in `structuredContent`. Earlier clients, including Strix 1.7's Python MCP client, receive those same JSON arrays in a text content block with `structuredContent` omitted: earlier protocol versions permit only objects in that field. Object results keep their structured representation in both versions. Integration workflows cover empty and populated lists across both protocols.
+
 Regenerate public schemas after changing a tool or contract:
 
 ```sh
