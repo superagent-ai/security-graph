@@ -14,20 +14,3 @@ The initial Go contract intentionally implements the strict verified repository 
 Read models and persisted submissions have different purposes. `github_advisory.description` supplies the finding description; `triage.report_markdown` is a later investigation report. Outside submissions remain attributable claims and do not automatically populate a trusted verification result. Provider-specific sandbox execution state and hosted source-table mappings belong to the native app adapter.
 
 `contracts/mcp-tools.json` is generated from the actual MCP registry, so clients and non-Go consumers can inspect the same required fields used by the server. Go remains the source for new transport metadata such as mandatory intent. Native app compatibility is exercised by the real app/service/database integration workflow described in `superagent-integration.md`, including app REST serialization and native report transitions.
-
-## Native runner context
-
-With the App's `native_scan_graph_context` migration, native mode also accepts
-existing, active native runner credentials. Their principal is derived from
-`security_graph.app_runner_principals` on every HTTP request: one organization,
-one existing asset and the `read` scope. Token expiry, native revocation and run
-completion remove access. Clients cannot select an organization or expand this
-scope through MCP arguments. Runner tokens cannot submit findings, change triage,
-finish a report, create assets or export the change feed.
-
-The App proxies a fixed bounded context read for native harnesses. Its existing
-organization API-key gateway and external assessment ownership remain unchanged.
-PR scan records and durable review feedback are live App projections; their
-revision and source IDs remain historical evidence rather than current proof.
-The real App/Go/PostgreSQL workflows, including all five harness context loaders,
-are verified by `tests/integration/security-graph-native-http.test.ts` in the App.

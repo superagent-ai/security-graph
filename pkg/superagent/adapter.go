@@ -33,24 +33,10 @@ func Enable(ctx context.Context, s *postgres.Store) error {
 }
 func (a *Adapter) Authenticate(ctx context.Context, s *postgres.Store, token string) (storage.Principal, error) {
 	var p storage.Principal
-	h := sha256.Sum256([]byte(token))
 	if !strings.HasPrefix(token, "sk_live_") {
-		// Optional app migration: existing runner credentials confer read-only
-		// access to one asset for an active run. Re-evaluated on every request,
-		// so native revocation, expiry and execution completion take effect.
-		var enabled bool
-		if err := s.Pool.QueryRow(ctx, "SELECT to_regclass('security_graph.app_runner_principals') IS NOT NULL").Scan(&enabled); err != nil || !enabled {
-			return p, storage.ErrForbidden
-		}
-		var asset string
-		err := s.Pool.QueryRow(ctx, "SELECT organization_id,actor_id,asset_id FROM security_graph.app_runner_principals WHERE token_hash=$1", hex.EncodeToString(h[:])).Scan(&p.OrganizationID, &p.ActorID, &asset)
-		if err != nil {
-			return storage.Principal{}, storage.ErrForbidden
-		}
-		p.Scopes = []string{"read"}
-		p.AssetIDs = []string{asset}
-		return p, nil
+		return p, storage.ErrForbidden
 	}
+	h := sha256.Sum256([]byte(token))
 	var id string
 	err := s.Pool.QueryRow(ctx, "SELECT id::text,organization_id::text FROM public.api_keys WHERE key_hash=$1", hex.EncodeToString(h[:])).Scan(&id, &p.OrganizationID)
 	if err != nil {
