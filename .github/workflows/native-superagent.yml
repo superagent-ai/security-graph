@@ -10,7 +10,7 @@ on:
       app_ref:
         description: Immutable app commit to test
         required: true
-        default: 4e396bc894172d8e0867e2b206699f140e6e0a96
+        default: 7f65b84bc85a1ee5535a5201b2c8949f28d0dc98
         type: string
 
 permissions:
