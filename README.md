@@ -10,7 +10,7 @@ Security Graph gives your agents that context through MCP. They can read finding
 
 - Reduce repeated investigation and give agents the context to distinguish false positives from real issues.
 - Carry knowledge between assessments to shorten the path from finding to fix and make frequent checks less expensive.
-- Use your own agents and models, with data stored in your infrastructure or the existing Superagent app database.
+- Use your own agents and models, with data stored in your infrastructure.
 
 Your agent performs the security assessment. Security Graph stores and shares the context.
 
