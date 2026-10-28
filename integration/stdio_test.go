@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -117,6 +118,18 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 	assetArgs["asset_id"] = "stdio/" + uuid.NewString()
 	assetArgs["name"], assetArgs["type"], assetArgs["locator"] = "Local payments", "repository", "https://github.com/example/payments"
 	asset := stdioRecord(t, ctx, session, "create_asset", assetArgs)
+	t.Run("empty list is readable by legacy clients", func(t *testing.T) {
+		legacy, _ := connect(t, "2025-11-25", "--org", "empty-list-"+uuid.NewString())
+		result, err := legacy.CallTool(ctx, &mcp.CallToolParams{Name: "list_assets", Arguments: map[string]any{"intent": "Discover assets in an empty standalone workspace."}})
+		if err != nil || result.IsError || result.StructuredContent != nil || len(result.Content) != 1 {
+			t.Fatalf("legacy empty asset discovery returned an invalid result: %v", err)
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		var rows []storage.Record
+		if !ok || json.Unmarshal([]byte(content.Text), &rows) != nil || len(rows) != 0 {
+			t.Fatal("legacy empty asset list must contain a JSON array text fallback")
+		}
+	})
 	reportArgs := writeArgs()
 	reportArgs["asset_id"], reportArgs["type"], reportArgs["target"] = asset.ID, "repository", "example/payments@fixture"
 	report := stdioRecord(t, ctx, session, "create_report", reportArgs)
@@ -148,6 +161,36 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 		encoded, _ := json.Marshal(result.StructuredContent)
 		if !bytes.Contains(encoded, []byte(saved.ID)) {
 			t.Fatal("stdio context omitted the persisted finding")
+		}
+	})
+	t.Run("list results across protocol versions", func(t *testing.T) {
+		for _, protocol := range []string{"2025-11-25", "2026-07-28"} {
+			reader, _ := connect(t, protocol, "--scopes", "read,export")
+			for _, entry := range []struct{ tool, id string }{{"list_assets", asset.ID}, {"list_reports", report.ID}, {"list_findings", saved.ID}, {"list_changes", saved.ID}} {
+				args := map[string]any{"intent": "Reuse persisted assessment context from a new client session."}
+				if entry.tool == "list_changes" {
+					args["after"], args["limit"] = 0, 100
+				}
+				result, err := reader.CallTool(ctx, &mcp.CallToolParams{Name: entry.tool, Arguments: args})
+				if err != nil || result.IsError || len(result.Content) != 1 {
+					t.Fatalf("%s %s: %v", protocol, entry.tool, err)
+				}
+				content, ok := result.Content[0].(*mcp.TextContent)
+				var rows []json.RawMessage
+				if !ok || json.Unmarshal([]byte(content.Text), &rows) != nil || !strings.Contains(content.Text, entry.id) {
+					t.Fatalf("%s %s lost persisted context", protocol, entry.tool)
+				}
+				if protocol == "2025-11-25" && result.StructuredContent != nil {
+					t.Fatalf("%s returned a non-object structuredContent to a legacy client", entry.tool)
+				}
+				if protocol == "2026-07-28" {
+					encoded, _ := json.Marshal(result.StructuredContent)
+					var structured, text any
+					if json.Unmarshal(encoded, &structured) != nil || json.Unmarshal([]byte(content.Text), &text) != nil || !reflect.DeepEqual(structured, text) {
+						t.Fatalf("%s modern structured and text results differ", entry.tool)
+					}
+				}
+			}
 		}
 	})
 	t.Run("least privilege and fixed local identity", func(t *testing.T) {

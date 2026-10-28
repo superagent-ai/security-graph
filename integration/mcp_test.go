@@ -64,6 +64,16 @@ func (c client) rpc(method string, params any) (rpcResult, error) {
 	}
 	var out rpcResult
 	err = json.Unmarshal(b, &out)
+	// Legacy clients recover non-object results from their JSON text fallback.
+	if err == nil && len(out.Result.Structured) == 0 {
+		var content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(out.Result.Content, &content) == nil && len(content) == 1 && content[0].Type == "text" && json.Valid([]byte(content[0].Text)) {
+			out.Result.Structured = json.RawMessage(content[0].Text)
+		}
+	}
 	return out, err
 }
 func (c client) call(t *testing.T, name string, args any) rpcResult {
