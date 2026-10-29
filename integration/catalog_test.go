@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 	assetArgs["type"] = "type"
 	assetArgs["locator"] = "fixture"
 	failure(t, c.call(t, "create_asset", assetArgs))
-	create := func(label string) (storage.Record, storage.Record) {
+	create := func(c client, label string) (storage.Record, storage.Record) {
 		a := writeArgs()
 		a["asset_id"] = label + uuid.NewString()
 		a["name"] = label
@@ -91,8 +92,8 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		f["finding"] = finding(uuid.NewString())
 		return asset, c.record(t, "submit_finding", f)
 	}
-	asset, f := create("payments")
-	_, private := create("private")
+	asset, f := create(c, "payments")
+	_, private := create(c, "private")
 	args := func(f storage.Record, version int64, ids []string) map[string]any {
 		a := writeArgs()
 		a["finding_id"] = f.ID
@@ -246,11 +247,17 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		failure(t, c.call(t, "set_finding_types", invalid))
 		final := c.record(t, "get_finding_classification", map[string]any{"intent": "Read persisted local model decisions.", "finding_id": f.ID})
 		eng.Classifier = classifier.Command{Path: python, Args: []string{script, "--model-dir", filepath.Join(t.TempDir(), "missing-model")}}
+		failureClient := issue("failure-"+uuid.NewString(), "", true, "read", "submit", "graph:write")
+		_, failureFinding := create(failureClient, "runtime-failure")
 		failing := writeArgs()
-		failing["finding_id"] = f.ID
-		failing["expected_version"] = f.Version
-		failing["expected_classification_version"] = assigned.Version
-		failure(t, c.call(t, "classify_finding", failing))
+		failing["finding_id"] = failureFinding.ID
+		failing["expected_version"] = failureFinding.Version
+		failing["expected_classification_version"] = 0
+		failed := failureClient.call(t, "classify_finding", failing)
+		failure(t, failed)
+		if !bytes.Contains(failed.Result.Content, []byte("local_classifier_unavailable")) {
+			t.Fatal("runtime failure was not exercised")
+		}
 		unchanged := c.record(t, "get_finding_classification", map[string]any{"intent": "Ensure runtime failure commits no assignment.", "finding_id": f.ID})
 		if unchanged.Version != assigned.Version {
 			t.Fatal("runtime failure committed")
@@ -265,4 +272,135 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 			t.Fatal("model changed triage")
 		}
 	})
+	t.Run("real Julia process-wide capacity and tenant cooldowns", func(t *testing.T) {
+		python, model := os.Getenv("JULIA_PYTHON"), os.Getenv("JULIA_MODEL_DIR")
+		if python == "" || model == "" {
+			if os.Getenv("REQUIRE_JULIA") == "1" {
+				t.Fatal("Julia configuration required")
+			}
+			t.Skip("requires actual Julia weights")
+		}
+		script, err := filepath.Abs("../scripts/julia/classify.py")
+		if err != nil {
+			t.Fatal(err)
+		}
+		command := classifier.Command{Path: python, Args: []string{script, "--model-dir", model}}
+		eng.Classifier = command
+		// Separate Engine instances must share the same process-wide budget.
+		secondEngine := &engine.Engine{Store: db, Classifier: command}
+		secondAPI := httptest.NewServer(server.Handler(secondEngine, db, "capacity-integration"))
+		defer secondAPI.Close()
+		type tenant struct {
+			org     string
+			c       client
+			finding storage.Record
+		}
+		tenants := []tenant{}
+		for i := 0; i < 3; i++ {
+			org := "capacity-" + uuid.NewString()
+			c := issue(org, "", true, "read", "submit", "graph:write")
+			if i%2 == 1 {
+				c.url = secondAPI.URL
+			}
+			_, f := create(c, "capacity")
+			tenants = append(tenants, tenant{org, c, f})
+		}
+		sibling := issue(tenants[0].org, "", true, "read", "graph:write")
+		sibling.url = secondAPI.URL
+		tenants = append(tenants, tenant{tenants[0].org, sibling, tenants[0].finding})
+		type attempt struct {
+			who  int
+			args map[string]any
+			out  rpcResult
+			err  error
+		}
+		start := make(chan struct{})
+		results := make(chan attempt, 24)
+		var workers sync.WaitGroup
+		keys := []string{}
+		for i := 0; i < 24; i++ {
+			who := i % len(tenants)
+			a := writeArgs()
+			a["finding_id"] = tenants[who].finding.ID
+			a["expected_version"] = tenants[who].finding.Version
+			a["expected_classification_version"] = 0
+			keys = append(keys, a["idempotency_key"].(string))
+			workers.Add(1)
+			go func(who int, args map[string]any) {
+				defer workers.Done()
+				<-start
+				out, err := tenants[who].c.rpc("tools/call", map[string]any{"name": "classify_finding", "arguments": args})
+				results <- attempt{who, args, out, err}
+			}(who, a)
+		}
+		close(start)
+		workers.Wait()
+		close(results)
+		successful, busy := 0, 0
+		var winner attempt
+		var assignment storage.Record
+		for r := range results {
+			if r.err != nil {
+				t.Fatal(r.err)
+			}
+			if r.out.Result.IsError || len(r.out.Error) > 0 {
+				if !bytes.Contains(r.out.Result.Content, []byte("classifier_capacity_exceeded")) {
+					t.Fatalf("unexpected rejection: %s", r.out.Result.Content)
+				}
+				busy++
+				continue
+			}
+			successful++
+			winner = r
+			if json.Unmarshal(r.out.Result.Structured, &assignment) != nil || assignment.Kind != "classification" {
+				t.Fatal("invalid classification receipt")
+			}
+		}
+		if successful != 1 || busy != 23 {
+			t.Fatalf("admission allowed %d and rejected %d; wanted one process", successful, busy)
+		}
+		var receipts int
+		if err := db.Pool.QueryRow(ctx, "SELECT count(*) FROM security_graph.idempotency WHERE key=ANY($1::text[])", keys).Scan(&receipts); err != nil || receipts != 1 {
+			t.Fatalf("capacity rejections committed receipts: count=%d err=%v", receipts, err)
+		}
+		// Cached retries bypass admission, even with the model disconnected.
+		eng.Classifier = nil
+		secondEngine.Classifier = nil
+		recovered := tenants[winner.who].c.record(t, "classify_finding", winner.args)
+		if recovered.ID != assignment.ID || recovered.Version != assignment.Version {
+			t.Fatal("capacity limits blocked durable retry")
+		}
+		eng.Classifier = command
+		secondEngine.Classifier = command
+		currentArgs := func(f storage.Record, version int64) map[string]any {
+			a := writeArgs()
+			a["finding_id"] = f.ID
+			a["expected_version"] = f.Version
+			a["expected_classification_version"] = version
+			return a
+		}
+		for _, c := range []client{tenants[winner.who].c, issue(tenants[winner.who].org, "", true, "read", "graph:write")} {
+			r := c.call(t, "classify_finding", currentArgs(tenants[winner.who].finding, assignment.Version))
+			failure(t, r)
+			if !bytes.Contains(r.Result.Content, []byte("classifier_capacity_exceeded")) {
+				t.Fatal("actor/organization cooldown bypassed")
+			}
+		}
+		// Two other organizations can each reach the actual worker after the
+		// prior request terminates. A real missing-model failure frees the slot.
+		broken := classifier.Command{Path: python, Args: []string{script, "--model-dir", filepath.Join(t.TempDir(), "missing")}}
+		eng.Classifier = broken
+		secondEngine.Classifier = broken
+		for _, tenant := range tenants[:3] {
+			if tenant.org == tenants[winner.who].org {
+				continue
+			}
+			r := tenant.c.call(t, "classify_finding", currentArgs(tenant.finding, 0))
+			failure(t, r)
+			if !bytes.Contains(r.Result.Content, []byte("local_classifier_unavailable")) {
+				t.Fatal("worker slot not released or rejected tenant consumed cooldown")
+			}
+		}
+	})
+
 }

@@ -75,7 +75,7 @@ func safeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, known := range []error{contracts.ErrInvalid, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden, classifier.ErrUnavailable, classifier.ErrOutput} {
+	for _, known := range []error{contracts.ErrInvalid, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden, classifier.ErrUnavailable, classifier.ErrOutput, engine.ErrClassifierCapacity} {
 		if errors.Is(err, known) {
 			return err
 		}
@@ -172,7 +172,7 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 		return e.GetClassification(ctx, p, in.Intent, in.FindingID)
 	})
 	add(s, "set_finding_types", "Assign existing catalog types with rationale, or an empty list for unclassified. Requires read and graph:write; current finding and classification versions. Does not confirm a vulnerability.", false, func(ctx context.Context, in engine.SetTypesInput) (any, error) { return e.SetFindingTypes(ctx, p, in) })
-	add(s, "classify_finding", "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions.", false, func(ctx context.Context, in engine.ClassifyInput) (any, error) { return e.ClassifyFinding(ctx, p, in) })
+	add(s, "classify_finding", "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions. Capacity is bounded; retry capacity errors with the same key and payload after 60 seconds.", false, func(ctx context.Context, in engine.ClassifyInput) (any, error) { return e.ClassifyFinding(ctx, p, in) })
 	add(s, "get_context", "Retrieve an authorized graph neighborhood. Depth 0 to 3, limit 1 to 100; returns provenance and truncation.", true, func(ctx context.Context, in ContextInput) (engine.ContextResult, error) {
 		return e.Context(ctx, p, in.Intent, in.EntityID, in.Depth, in.Limit)
 	})

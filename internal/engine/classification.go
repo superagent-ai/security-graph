@@ -178,7 +178,7 @@ func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in Cl
 			req.Candidates = append(req.Candidates, t)
 		}
 	}
-	decision, err := e.Classifier.Classify(ctx, req)
+	decision, err := e.classifyLocally(ctx, p, req)
 	if err != nil {
 		return nil, err
 	}

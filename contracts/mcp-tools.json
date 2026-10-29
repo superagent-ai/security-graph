@@ -63,7 +63,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions.",
+    "description": "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions. Capacity is bounded; retry capacity errors with the same key and payload after 60 seconds.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
