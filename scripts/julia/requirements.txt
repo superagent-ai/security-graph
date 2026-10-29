@@ -1,0 +1,7 @@
+# Versions exercised by the local integration workflow. Install torch from the
+# CPU wheel index first on Linux to avoid downloading CUDA runtime packages.
+torch==2.15.0
+transformers==5.0.0
+huggingface-hub==1.33.0
+safetensors==0.8.0
+numpy==2.5.4

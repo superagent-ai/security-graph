@@ -63,6 +63,50 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
+    "description": "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_classification_version": {
+          "description": "0 for first classification; otherwise the current classification record version.",
+          "type": "integer"
+        },
+        "expected_version": {
+          "description": "Current finding version; classification does not change it.",
+          "type": "integer"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "finding_id",
+        "expected_version",
+        "expected_classification_version"
+      ],
+      "type": "object"
+    },
+    "name": "classify_finding"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
     "description": "Register an asset under authorized asset access. Requires graph:write permission.",
     "inputSchema": {
       "additionalProperties": false,
@@ -264,6 +308,40 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
+    "description": "Read the current authorized finding classification and its version, model scores and provenance.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "type": "string"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "report_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "get_finding_classification"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
     "description": "Read one authorized report including current version and full structured content.",
     "inputSchema": {
       "additionalProperties": false,
@@ -291,6 +369,31 @@
       "type": "object"
     },
     "name": "get_report"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read the immutable vulnerability types, hierarchy, framework releases and sourced mappings. Catalog IDs cannot be created by agents.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "type": "object"
+    },
+    "name": "get_vulnerability_catalog"
   },
   {
     "annotations": {
@@ -480,6 +583,65 @@
       "type": "object"
     },
     "name": "list_reports"
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Assign existing catalog types with rationale, or an empty list for unclassified. Requires read and graph:write; current finding and classification versions. Does not confirm a vulnerability.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_classification_version": {
+          "description": "0 for first classification; otherwise the current classification record version.",
+          "type": "integer"
+        },
+        "expected_version": {
+          "description": "Current finding version; classification does not change it.",
+          "type": "integer"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "description": "Stable key for retrying exactly this mutation.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "type_ids": {
+          "description": "Existing classifiable catalog IDs. Empty records an unclassified finding.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        }
+      },
+      "required": [
+        "intent",
+        "idempotency_key",
+        "finding_id",
+        "expected_version",
+        "expected_classification_version",
+        "type_ids",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "name": "set_finding_types"
   },
   {
     "annotations": {

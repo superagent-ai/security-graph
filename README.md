@@ -78,3 +78,10 @@ The MCP process exits when your agent disconnects. To stop PostgreSQL while keep
 - [Development, integration tests, and releases](docs/development.md)
 - [Product and implementation plan](docs/product-and-implementation-plan.md)
 - [Finding/report compatibility](docs/source-compatibility.md)
+
+### Vulnerability classifications
+
+The engine includes a curated, versioned vulnerability catalog and sourced
+mappings to CWE, OWASP, MITRE ATLAS and AIUC-1. Agents can discover the catalog,
+assign existing types, and optionally run Julia-1 locally for model suggestions.
+See [catalog, graph relationships and local classifier setup](docs/vulnerability-catalog.md).

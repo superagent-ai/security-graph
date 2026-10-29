@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -18,6 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/superagent-ai/security-graph/internal/engine"
 	"github.com/superagent-ai/security-graph/internal/server"
+	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/postgres"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 	"github.com/superagent-ai/security-graph/pkg/superagent"
@@ -75,9 +78,28 @@ func run() error {
 			return err
 		}
 	}
+	eng := &engine.Engine{Store: store}
+	if os.Args[1] == "serve" || os.Args[1] == "stdio" {
+		if command := os.Getenv("CLASSIFIER_COMMAND"); command != "" {
+			var args []string
+			if raw := os.Getenv("CLASSIFIER_ARGS"); raw != "" {
+				if json.Unmarshal([]byte(raw), &args) != nil {
+					return fmt.Errorf("CLASSIFIER_ARGS must be a JSON string array")
+				}
+			}
+			eng.Classifier = classifier.Command{Path: command, Args: args}
+		}
+		if raw := os.Getenv("CLASSIFICATION_THRESHOLD"); raw != "" {
+			value, err := strconv.ParseFloat(raw, 64)
+			if err != nil || !(value > 0 && value <= 1) {
+				return fmt.Errorf("CLASSIFICATION_THRESHOLD must be in (0,1]")
+			}
+			eng.ClassificationThreshold = value
+		}
+	}
 	switch os.Args[1] {
 	case "stdio":
-		err := server.NewMCP(&engine.Engine{Store: store}, local, version).Run(ctx, &mcp.StdioTransport{MaxLineLength: 1 << 20})
+		err := server.NewMCP(eng, local, version).Run(ctx, &mcp.StdioTransport{MaxLineLength: 1 << 20})
 		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			return nil
 		}
@@ -133,7 +155,7 @@ func run() error {
 		if addr == "" {
 			addr = "127.0.0.1:8080"
 		}
-		srv := &http.Server{Addr: addr, Handler: server.Handler(&engine.Engine{Store: store}, store, version), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
+		srv := &http.Server{Addr: addr, Handler: server.Handler(eng, store, version), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 		go func() {
 			<-ctx.Done()
 			stop, done := context.WithTimeout(context.Background(), 10*time.Second)
