@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """One-shot local classifier protocol; no inference-time downloads or telemetry.
 
-Run with the venv that installed the pinned Julia package. The engine supplies
+Run with the venv containing the hash-pinned runtime dependencies. The engine supplies
 JSON on stdin. Stdout is protocol-only. Do not invoke this on untrusted model code.
 """
 import argparse
-import hashlib
 import contextlib
 import json
 import os
 from pathlib import Path
 import sys
 
-REVISION = "a85b127321d580d65176c89ced8273f305745d85"
-WEIGHTS_SHA256 = "df853bf7fe424420011f3d0c47a05d7341aa9eefa7fb9f203ea4aada4ad95b72"
+from bundle import REVISION, verify_bundle
 
 
 def main():
@@ -23,11 +21,11 @@ def main():
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     model_dir = Path(args.model_dir)
-    if (model_dir / "security-graph-revision").read_text().strip() != REVISION:
-        raise ValueError("model revision mismatch")
-    with (model_dir / "model.safetensors").open("rb") as weights:
-        if hashlib.file_digest(weights, "sha256").hexdigest() != WEIGHTS_SHA256:
-            raise ValueError("model weights mismatch")
+    verify_bundle(model_dir)
+    # No editable installation or dynamic package path from the environment.
+    # Validate the complete bundle, then import only from this absolute path.
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(model_dir.resolve()))
     request = json.load(sys.stdin)
     candidates = request["candidates"]
     if not candidates or len(candidates) > 100:

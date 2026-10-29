@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"os"
 	"os/exec"
 	"time"
 
@@ -54,6 +55,20 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 		return Result{}, err
 	}
 	cmd := exec.CommandContext(ctx, c.Path, c.Args...)
+	// A local model receives evidence, not deployment credentials or Python
+	// import hooks. Its working directory and writable home are private too.
+	work, err := os.MkdirTemp("", "security-graph-classifier-")
+	if err != nil {
+		return Result{}, ErrUnavailable
+	}
+	defer os.RemoveAll(work)
+	cmd.Dir = work
+	cmd.Env = []string{"HOME=" + work, "TMPDIR=" + work, "TMP=" + work, "TEMP=" + work, "HF_HOME=" + work, "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "DO_NOT_TRACK=1", "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1"}
+	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "JULIA_CPU_THREADS"} {
+		if value, ok := os.LookupEnv(key); ok {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+	}
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = bytes.NewReader(b)
 	out, err := cmd.StdoutPipe()

@@ -214,7 +214,23 @@ func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in Cl
 var errInferenceRequired = fmt.Errorf("inference_required")
 
 func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record, error) {
+	// Asset IDs were unrestricted before catalogs existed. Never reinterpret an
+	// authorized legacy record as a public definition or a projected edge.
+	if r, err := tx.Get(ctx, id); err != storage.ErrNotFound {
+		return r, err
+	}
 	if r, ok := currentCatalog().Get(id); ok {
+		if r.Kind == "relationship" {
+			var rel contracts.Relationship
+			_ = json.Unmarshal(r.Data, &rel)
+			for _, endpoint := range []string{rel.SourceID, rel.TargetID} {
+				if _, err := tx.Get(ctx, endpoint); err == nil {
+					return storage.Record{}, storage.ErrNotFound
+				} else if err != storage.ErrNotFound {
+					return storage.Record{}, err
+				}
+			}
+		}
 		return r, nil
 	}
 	if strings.HasPrefix(id, "classification-edge:") {
@@ -239,12 +255,18 @@ func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record
 		}
 		for _, typeID := range cl.TypeIDs {
 			if typeID == parts[1] {
+				target := "catalog:v" + cl.CatalogVersion + ":type:" + typeID
+				if _, err := tx.Get(ctx, target); err == nil {
+					return storage.Record{}, storage.ErrNotFound
+				} else if err != storage.ErrNotFound {
+					return storage.Record{}, err
+				}
 				return classificationEdge(r, cl, typeID), nil
 			}
 		}
 		return storage.Record{}, storage.ErrNotFound
 	}
-	return tx.Get(ctx, id)
+	return storage.Record{}, storage.ErrNotFound
 }
 func classificationEdge(r storage.Record, cl Classification, id string) storage.Record {
 	edgeType := "instance_of"
@@ -259,6 +281,24 @@ func classificationEdge(r storage.Record, cl Classification, id string) storage.
 // All finding lookups and classification queries use the authenticated snapshot.
 func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit func(storage.Record) error) error {
 	c := currentCatalog()
+	collisions := map[string]bool{}
+	virtualAvailable := func(ids ...string) (bool, error) {
+		for _, id := range ids {
+			exists, known := collisions[id]
+			if !known {
+				_, err := tx.Get(ctx, id)
+				if err != nil && err != storage.ErrNotFound {
+					return false, err
+				}
+				exists = err == nil
+				collisions[id] = exists
+			}
+			if exists {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
 	connected := map[string]bool{}
 	for _, id := range front {
 		connected[id] = true
@@ -270,6 +310,13 @@ func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit fun
 		var rel contracts.Relationship
 		_ = json.Unmarshal(r.Data, &rel)
 		if connected[rel.SourceID] || connected[rel.TargetID] {
+			available, err := virtualAvailable(r.ID, rel.SourceID, rel.TargetID)
+			if err != nil {
+				return err
+			}
+			if !available {
+				continue
+			}
 			if err := emit(r); err != nil {
 				return err
 			}
@@ -310,6 +357,13 @@ func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit fun
 						continue
 					}
 					edge := classificationEdge(r, cl, id)
+					available, er := virtualAvailable(edge.ID, target)
+					if er != nil {
+						return er
+					}
+					if !available {
+						continue
+					}
 					if err = emit(edge); err != nil {
 						return err
 					}

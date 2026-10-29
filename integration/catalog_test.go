@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -196,6 +199,62 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 	modelArgs["expected_version"] = f.Version
 	modelArgs["expected_classification_version"] = 2
 	failure(t, c.call(t, "classify_finding", modelArgs))
+	t.Run("legacy graph namespace collisions preserve persisted identity", func(t *testing.T) {
+		ids := []string{cat.TypeNode("ssrf"), "classification-edge:legacy-asset:ssrf"}
+		for _, id := range ids {
+			p := storage.Principal{OrganizationID: org, ActorID: "legacy-import", AllAssets: true, Scopes: []string{"read", "graph:write"}}
+			_, err := db.Update(ctx, p, storage.Call{Key: uuid.NewString(), Digest: uuid.NewString(), Intent: "Import an asset created before catalog namespaces existed.", Operation: "legacy_fixture_import"}, func(tx storage.Transaction) (any, error) {
+				b, _ := json.Marshal(contracts.Asset{Name: "Legacy private asset", Type: "repository", Locator: "https://example.com/legacy"})
+				return tx.Put(ctx, storage.Record{ID: id, Kind: "asset", AssetID: id, Data: b}, 0)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			reportArgs := writeArgs()
+			reportArgs["asset_id"] = id
+			reportArgs["type"] = "repository"
+			reportArgs["target"] = "https://example.com/legacy"
+			report := c.record(t, "create_report", reportArgs)
+			root := contextAt(c, id, 1)
+			if root.Records[0].Kind != "asset" || !bytes.Contains(root.Records[0].Data, []byte("Legacy private asset")) {
+				t.Fatal("legacy asset was reinterpreted")
+			}
+			linked := false
+			for _, r := range root.Records {
+				if r.ID == report.ID {
+					linked = true
+				}
+				if r.Kind == "framework_entry" || r.Kind == "vulnerability_type" {
+					t.Fatal("legacy asset gained catalog relationships")
+				}
+			}
+			if !linked {
+				t.Fatal("legacy asset lost persisted relationships")
+			}
+			aroundReport := contextAt(c, report.ID, 1)
+			for _, r := range aroundReport.Records {
+				if r.ID == id && r.Kind != "asset" {
+					t.Fatal("persisted relationship endpoint was reinterpreted")
+				}
+			}
+		}
+		// A caller without access to the colliding asset still sees only the
+		// public catalog definition, with no private data or relationships.
+		hidden := contextAt(scoped, cat.TypeNode("ssrf"), 1)
+		hiddenJSON, _ := json.Marshal(hidden)
+		if hidden.Records[0].Kind != "vulnerability_type" || bytes.Contains(hiddenJSON, []byte("Legacy private asset")) {
+			t.Fatal("catalog lookup leaked an inaccessible legacy asset")
+		}
+		_, f := create(c, "collision-classification")
+		cl := c.record(t, "set_finding_types", args(f, 0, []string{"ssrf"}))
+		graph := contextAt(c, f.ID, 1)
+		for _, r := range graph.Records {
+			if strings.HasPrefix(r.ID, "classification-edge:") {
+				t.Fatal("assignment was projected onto the legacy asset")
+			}
+		}
+		failure(t, c.call(t, "get_context", map[string]any{"intent": "Do not reinterpret a colliding assignment target.", "entity_id": "classification-edge:" + cl.ID + ":ssrf", "depth": 0, "limit": 10}))
+	})
 	t.Run("real Julia local decisions and durable retry", func(t *testing.T) {
 		python, model := os.Getenv("JULIA_PYTHON"), os.Getenv("JULIA_MODEL_DIR")
 		if python == "" || model == "" {
@@ -208,8 +267,124 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		eng.Classifier = classifier.Command{Path: python, Args: []string{script, "--model-dir", model}}
+		// Exercise the real installer and model without an editable package.
+		install, err := filepath.Abs("../scripts/julia/install.py")
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestPath, err := filepath.Abs("../scripts/julia/manifest.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestBody, err := os.ReadFile(manifestPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var manifest struct {
+			Files map[string]string `json:"files"`
+		}
+		if json.Unmarshal(manifestBody, &manifest) != nil {
+			t.Fatal("invalid manifest")
+		}
+		source := t.TempDir()
+		for name := range manifest.Files {
+			target := filepath.Join(source, name)
+			if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+				t.Fatal(err)
+			}
+			original := filepath.Join(model, name)
+			if err := os.Link(original, target); err != nil {
+				src, err := os.Open(original)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dst, err := os.Create(target)
+				if err != nil {
+					_ = src.Close()
+					t.Fatal(err)
+				}
+				_, copyErr := io.Copy(dst, src)
+				_ = src.Close()
+				closeErr := dst.Close()
+				if copyErr != nil || closeErr != nil {
+					t.Fatal("copy model fixture failed")
+				}
+			}
+		}
+		buildMarker := filepath.Join(t.TempDir(), "build-executed")
+		backend := fmt.Sprintf("from pathlib import Path\nPath(%q).write_text('unexpected build')\nraise RuntimeError('remote build executed')\n", buildMarker)
+		if err := os.WriteFile(filepath.Join(source, "evil_backend.py"), []byte(backend), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(source, "pyproject.toml"), []byte("[build-system]\nrequires=[]\nbuild-backend='evil_backend'\nbackend-path=['.']\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		prepared := filepath.Join(t.TempDir(), "verified-model")
+		if out, err := exec.Command(python, install, "--source-dir", source, "--model-dir", prepared).CombinedOutput(); err != nil {
+			t.Fatalf("verified setup failed: %v %s", err, out)
+		}
+		if _, err := os.Stat(buildMarker); !os.IsNotExist(err) {
+			t.Fatal("installer executed remote packaging code")
+		}
+		if _, err := os.Stat(filepath.Join(prepared, "pyproject.toml")); !os.IsNotExist(err) {
+			t.Fatal("packaging code entered runtime bundle")
+		}
+		codePath := filepath.Join(source, "julia", "__init__.py")
+		originalCode, err := os.ReadFile(codePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Break the fixture hardlink before altering it; never modify the source checkpoint.
+		if err := os.Remove(codePath); err != nil {
+			t.Fatal(err)
+		}
+		tampered := append(append([]byte{}, originalCode...), []byte(backend)...)
+		if err := os.WriteFile(codePath, tampered, 0600); err != nil {
+			t.Fatal(err)
+		}
+		rejected := filepath.Join(t.TempDir(), "rejected-model")
+		out, err := exec.Command(python, install, "--source-dir", source, "--model-dir", rejected).CombinedOutput()
+		if err == nil || !bytes.Contains(out, []byte("integrity mismatch")) {
+			t.Fatal("altered runtime source was not rejected")
+		}
+		if _, err := os.Stat(rejected); !os.IsNotExist(err) {
+			t.Fatal("installer published a partial invalid bundle")
+		}
+		auditMarker := filepath.Join(t.TempDir(), "environment-audited")
+		poisonDir := t.TempDir()
+		startupMarker := filepath.Join(t.TempDir(), "startup-executed")
+		poison := fmt.Sprintf("from pathlib import Path\nPath(%q).write_text('inherited Python import hook')\n", startupMarker)
+		if err := os.WriteFile(filepath.Join(poisonDir, "sitecustomize.py"), []byte(poison), 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("DATABASE_URL", "integration-only-secret")
+		t.Setenv("CUSTOM_SERVICE_SECRET", "integration-only-secret")
+		t.Setenv("HF_TOKEN", "integration-only-token")
+		t.Setenv("PYTHONPATH", poisonDir)
+		wrapper := filepath.Join(t.TempDir(), "audit-real-classifier.py")
+		code := fmt.Sprintf(`import os, runpy, sys
+from pathlib import Path
+for name in ['DATABASE_URL','TEST_DATABASE_URL','CUSTOM_SERVICE_SECRET','HF_TOKEN','PYTHONPATH','PYTHONSTARTUP']:
+    assert name not in os.environ, 'service environment leaked'
+assert Path.cwd().resolve() == Path(os.environ['HOME']).resolve() == Path(os.environ['TMPDIR']).resolve()
+assert os.environ['HF_HUB_OFFLINE'] == os.environ['TRANSFORMERS_OFFLINE'] == '1'
+Path(%q).write_text('isolated')
+sys.path.insert(0, %q)
+runpy.run_path(%q, run_name='__main__')
+`, auditMarker, filepath.Dir(script), script)
+		if err := os.WriteFile(wrapper, []byte(code), 0600); err != nil {
+			t.Fatal(err)
+		}
+		model = prepared
+		eng.Classifier = classifier.Command{Path: python, Args: []string{wrapper, "--model-dir", model}}
+
 		assigned = c.record(t, "classify_finding", modelArgs)
+		if _, err := os.Stat(auditMarker); err != nil {
+			t.Fatal("actual model did not pass environment audit")
+		}
+		if _, err := os.Stat(startupMarker); !os.IsNotExist(err) {
+			t.Fatal("inherited Python import hook ran")
+		}
 		var cl engine.Classification
 		if json.Unmarshal(assigned.Data, &cl) != nil || cl.Model == nil {
 			t.Fatal("model provenance missing")
@@ -246,7 +421,10 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		invalid["expected_version"] = f.Version + 1
 		failure(t, c.call(t, "set_finding_types", invalid))
 		final := c.record(t, "get_finding_classification", map[string]any{"intent": "Read persisted local model decisions.", "finding_id": f.ID})
-		eng.Classifier = classifier.Command{Path: python, Args: []string{script, "--model-dir", filepath.Join(t.TempDir(), "missing-model")}}
+		if err := os.WriteFile(filepath.Join(prepared, "julia", "__init__.py"), tampered, 0600); err != nil {
+			t.Fatal(err)
+		}
+		eng.Classifier = classifier.Command{Path: python, Args: []string{script, "--model-dir", prepared}}
 		failureClient := issue("failure-"+uuid.NewString(), "", true, "read", "submit", "graph:write")
 		_, failureFinding := create(failureClient, "runtime-failure")
 		failing := writeArgs()
@@ -256,7 +434,10 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		failed := failureClient.call(t, "classify_finding", failing)
 		failure(t, failed)
 		if !bytes.Contains(failed.Result.Content, []byte("local_classifier_unavailable")) {
-			t.Fatal("runtime failure was not exercised")
+			t.Fatal("runtime integrity failure was not exercised")
+		}
+		if _, err := os.Stat(buildMarker); !os.IsNotExist(err) {
+			t.Fatal("unverified model source executed")
 		}
 		unchanged := c.record(t, "get_finding_classification", map[string]any{"intent": "Ensure runtime failure commits no assignment.", "finding_id": f.ID})
 		if unchanged.Version != assigned.Version {

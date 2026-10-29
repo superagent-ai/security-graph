@@ -66,7 +66,8 @@ jobs:
       - name: Install the pinned local Julia classifier
         run: |
           python3 -m venv "$RUNNER_TEMP/julia-venv"
-          "$RUNNER_TEMP/julia-venv/bin/pip" install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+          export PIP_NO_CACHE_DIR=1
+          export HF_HOME="$RUNNER_TEMP/julia-download-cache"
           "$RUNNER_TEMP/julia-venv/bin/pip" install -r scripts/julia/requirements.txt
           "$RUNNER_TEMP/julia-venv/bin/python" scripts/julia/install.py --model-dir "$RUNNER_TEMP/julia-model"
           echo "JULIA_PYTHON=$RUNNER_TEMP/julia-venv/bin/python" >> "$GITHUB_ENV"
