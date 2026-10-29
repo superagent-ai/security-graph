@@ -1,0 +1,570 @@
+{
+  "version": "1",
+  "released_at": "2026-10-29T00:00:00Z",
+  "types": [
+    {
+      "id": "injection",
+      "name": "Injection",
+      "description": "Untrusted data changes the structure of an interpreted command or query.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": false,
+      "deprecated": false
+    },
+    {
+      "id": "sql_injection",
+      "name": "SQL injection",
+      "description": "Attacker-controlled input changes SQL query syntax or meaning. Excludes safely parameterized SQL.",
+      "aliases": [
+        "SQLi"
+      ],
+      "parents": [
+        "injection"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "blind_sql_injection",
+      "name": "Blind SQL injection",
+      "description": "SQL injection established through boolean responses or timing without direct query-result disclosure.",
+      "aliases": [],
+      "parents": [
+        "sql_injection"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "command_injection",
+      "name": "OS command injection",
+      "description": "Attacker-controlled input changes an operating-system shell command.",
+      "aliases": [],
+      "parents": [
+        "injection"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "cross_site_scripting",
+      "name": "Cross-site scripting",
+      "description": "Untrusted input executes script in another user browser origin.",
+      "aliases": [],
+      "parents": [
+        "injection"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "stored_xss",
+      "name": "Stored cross-site scripting",
+      "description": "Attacker input is persisted and later executes as script in another user browser.",
+      "aliases": [],
+      "parents": [
+        "cross_site_scripting"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "ssrf",
+      "name": "Server-side request forgery",
+      "description": "Attacker controls server-side network request destinations across an intended trust boundary.",
+      "aliases": [
+        "SSRF"
+      ],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "path_traversal",
+      "name": "Path traversal",
+      "description": "Attacker-controlled paths escape an intended filesystem directory.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "missing_authorization",
+      "name": "Missing authorization",
+      "description": "A sensitive operation lacks a required permission or ownership check. Authentication alone does not establish authorization.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "idor",
+      "name": "Insecure direct object reference",
+      "description": "Manipulating an object identifier bypasses object-level access restrictions. Requires an object-reference access-control failure.",
+      "aliases": [
+        "IDOR",
+        "BOLA"
+      ],
+      "parents": [
+        "missing_authorization"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "authentication_bypass",
+      "name": "Authentication bypass",
+      "description": "An attacker obtains an authenticated identity or access without satisfying required identity proof.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "insecure_deserialization",
+      "name": "Insecure deserialization",
+      "description": "Untrusted serialized objects trigger unintended behavior during deserialization.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "sensitive_data_exposure",
+      "name": "Sensitive data exposure",
+      "description": "Sensitive information is disclosed to an unauthorized recipient.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "prompt_injection",
+      "name": "Prompt injection",
+      "description": "Attacker-controlled instructions cause an AI system to cross an intended instruction or action boundary.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "indirect_prompt_injection",
+      "name": "Indirect prompt injection",
+      "description": "Instructions in retrieved documents, tool responses, or other external content redirect an AI system across its intended boundaries.",
+      "aliases": [],
+      "parents": [
+        "prompt_injection"
+      ],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "excessive_agency",
+      "name": "Excessive agency",
+      "description": "An AI agent has unnecessary capabilities, permissions, or autonomy enabling harmful actions.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    },
+    {
+      "id": "unsafe_tool_use",
+      "name": "Unsafe tool use",
+      "description": "An AI system invokes tools with unsafe arguments or without required authorization or approval.",
+      "aliases": [],
+      "parents": [],
+      "classifiable": true,
+      "deprecated": false
+    }
+  ],
+  "frameworks": [
+    {
+      "id": "cwe",
+      "name": "MITRE CWE",
+      "release": "4.19.1",
+      "source_url": "https://cwe.mitre.org/data/published/cwe_v4.19.1.pdf"
+    },
+    {
+      "id": "owasp-web",
+      "name": "OWASP Top 10",
+      "release": "2025",
+      "source_url": "https://top10.owasp.org/2025/"
+    },
+    {
+      "id": "aiuc-1",
+      "name": "AIUC-1",
+      "release": "2026-10-15",
+      "source_url": "https://standard.aiuc-1.com/changelog"
+    },
+    {
+      "id": "owasp-llm",
+      "name": "OWASP LLM Top 10",
+      "release": "2025",
+      "source_url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf"
+    },
+    {
+      "id": "mitre-atlas",
+      "name": "MITRE ATLAS",
+      "release": "2026.10",
+      "source_url": "https://github.com/mitre-atlas/atlas-data/blob/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml"
+    }
+  ],
+  "entries": [
+    {
+      "id": "cwe:CWE-89",
+      "framework": "cwe",
+      "external_id": "CWE-89",
+      "name": "Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/89.html"
+    },
+    {
+      "id": "owasp-web:A05",
+      "framework": "owasp-web",
+      "external_id": "A05",
+      "name": "Injection",
+      "kind": "risk_category",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/"
+    },
+    {
+      "id": "cwe:CWE-78",
+      "framework": "cwe",
+      "external_id": "CWE-78",
+      "name": "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/78.html"
+    },
+    {
+      "id": "cwe:CWE-79",
+      "framework": "cwe",
+      "external_id": "CWE-79",
+      "name": "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/79.html"
+    },
+    {
+      "id": "cwe:CWE-918",
+      "framework": "cwe",
+      "external_id": "CWE-918",
+      "name": "Server-Side Request Forgery (SSRF)",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/918.html"
+    },
+    {
+      "id": "owasp-web:A01",
+      "framework": "owasp-web",
+      "external_id": "A01",
+      "name": "Broken Access Control",
+      "kind": "risk_category",
+      "source_url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/"
+    },
+    {
+      "id": "cwe:CWE-22",
+      "framework": "cwe",
+      "external_id": "CWE-22",
+      "name": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/22.html"
+    },
+    {
+      "id": "cwe:CWE-862",
+      "framework": "cwe",
+      "external_id": "CWE-862",
+      "name": "Missing Authorization",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/862.html"
+    },
+    {
+      "id": "cwe:CWE-639",
+      "framework": "cwe",
+      "external_id": "CWE-639",
+      "name": "Authorization Bypass Through User-Controlled Key",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/639.html"
+    },
+    {
+      "id": "cwe:CWE-287",
+      "framework": "cwe",
+      "external_id": "CWE-287",
+      "name": "Improper Authentication",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/287.html"
+    },
+    {
+      "id": "cwe:CWE-502",
+      "framework": "cwe",
+      "external_id": "CWE-502",
+      "name": "Deserialization of Untrusted Data",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/502.html"
+    },
+    {
+      "id": "cwe:CWE-200",
+      "framework": "cwe",
+      "external_id": "CWE-200",
+      "name": "Exposure of Sensitive Information to an Unauthorized Actor",
+      "kind": "weakness",
+      "source_url": "https://cwe.mitre.org/data/definitions/200.html"
+    },
+    {
+      "id": "aiuc-1:B002",
+      "framework": "aiuc-1",
+      "external_id": "B002",
+      "name": "Detect adversarial input",
+      "kind": "control_requirement",
+      "source_url": "https://standard.aiuc-1.com/security/detect-adversarial-input"
+    },
+    {
+      "id": "aiuc-1:B006",
+      "framework": "aiuc-1",
+      "external_id": "B006",
+      "name": "Prevent unauthorized AI agent actions",
+      "kind": "control_requirement",
+      "source_url": "https://standard.aiuc-1.com/security/enforce-contextual-access-controls"
+    },
+    {
+      "id": "owasp-llm:LLM01",
+      "framework": "owasp-llm",
+      "external_id": "LLM01",
+      "name": "Prompt Injection",
+      "kind": "risk_category",
+      "source_url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/"
+    },
+    {
+      "id": "owasp-llm:LLM06",
+      "framework": "owasp-llm",
+      "external_id": "LLM06",
+      "name": "Excessive Agency",
+      "kind": "risk_category",
+      "source_url": "https://genai.owasp.org/llmrisk/llm06-excessive-agency/"
+    },
+    {
+      "id": "mitre-atlas:AML.T0051",
+      "framework": "mitre-atlas",
+      "external_id": "AML.T0051",
+      "name": "LLM Prompt Injection",
+      "kind": "attack_technique",
+      "source_url": "https://github.com/mitre-atlas/atlas-data/blob/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml"
+    },
+    {
+      "id": "mitre-atlas:AML.T0051.001",
+      "framework": "mitre-atlas",
+      "external_id": "AML.T0051.001",
+      "name": "LLM Prompt Injection: Indirect",
+      "kind": "attack_technique",
+      "source_url": "https://github.com/mitre-atlas/atlas-data/blob/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml"
+    }
+  ],
+  "mappings": [
+    {
+      "source": "sql_injection",
+      "target": "cwe:CWE-89",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/89.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "sql_injection",
+      "target": "owasp-web:A05",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "blind_sql_injection",
+      "target": "cwe:CWE-89",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/89.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "blind_sql_injection",
+      "target": "owasp-web:A05",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "command_injection",
+      "target": "cwe:CWE-78",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/78.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "command_injection",
+      "target": "owasp-web:A05",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "cross_site_scripting",
+      "target": "cwe:CWE-79",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/79.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "cross_site_scripting",
+      "target": "owasp-web:A05",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "stored_xss",
+      "target": "cwe:CWE-79",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/79.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "stored_xss",
+      "target": "owasp-web:A05",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A05_2025-Injection/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "ssrf",
+      "target": "cwe:CWE-918",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/918.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "ssrf",
+      "target": "owasp-web:A01",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "path_traversal",
+      "target": "cwe:CWE-22",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/22.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "path_traversal",
+      "target": "owasp-web:A01",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "missing_authorization",
+      "target": "cwe:CWE-862",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/862.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "missing_authorization",
+      "target": "owasp-web:A01",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "idor",
+      "target": "cwe:CWE-639",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/639.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "idor",
+      "target": "owasp-web:A01",
+      "type": "maps_to",
+      "source_url": "https://top10.owasp.org/2025/A01_2025-Broken_Access_Control/",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "authentication_bypass",
+      "target": "cwe:CWE-287",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/287.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "insecure_deserialization",
+      "target": "cwe:CWE-502",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/502.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "sensitive_data_exposure",
+      "target": "cwe:CWE-200",
+      "type": "maps_to",
+      "source_url": "https://cwe.mitre.org/data/definitions/200.html",
+      "rationale": "Security Graph curated technical classification; related scope, not equivalence or verification."
+    },
+    {
+      "source": "prompt_injection",
+      "target": "aiuc-1:B002",
+      "type": "addressed_by",
+      "source_url": "https://standard.aiuc-1.com/security/detect-adversarial-input",
+      "rationale": "Potentially relevant safeguard; applicability requires assessment of the affected AI system. Does not establish compliance."
+    },
+    {
+      "source": "indirect_prompt_injection",
+      "target": "aiuc-1:B002",
+      "type": "addressed_by",
+      "source_url": "https://standard.aiuc-1.com/security/detect-adversarial-input",
+      "rationale": "Potentially relevant safeguard; applicability requires assessment of the affected AI system. Does not establish compliance."
+    },
+    {
+      "source": "excessive_agency",
+      "target": "aiuc-1:B006",
+      "type": "addressed_by",
+      "source_url": "https://standard.aiuc-1.com/security/enforce-contextual-access-controls",
+      "rationale": "Potentially relevant safeguard; applicability requires assessment of the affected AI system. Does not establish compliance."
+    },
+    {
+      "source": "unsafe_tool_use",
+      "target": "aiuc-1:B006",
+      "type": "addressed_by",
+      "source_url": "https://standard.aiuc-1.com/security/enforce-contextual-access-controls",
+      "rationale": "Potentially relevant safeguard; applicability requires assessment of the affected AI system. Does not establish compliance."
+    },
+    {
+      "source": "prompt_injection",
+      "target": "owasp-llm:LLM01",
+      "type": "maps_to",
+      "source_url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+      "rationale": "Curated mapping to the 2025 risk category. Classification only; no verification or compliance assertion."
+    },
+    {
+      "source": "indirect_prompt_injection",
+      "target": "owasp-llm:LLM01",
+      "type": "maps_to",
+      "source_url": "https://genai.owasp.org/llmrisk/llm01-prompt-injection/",
+      "rationale": "Curated mapping to the 2025 risk category. Classification only; no verification or compliance assertion."
+    },
+    {
+      "source": "excessive_agency",
+      "target": "owasp-llm:LLM06",
+      "type": "maps_to",
+      "source_url": "https://genai.owasp.org/llmrisk/llm06-excessive-agency/",
+      "rationale": "Curated mapping to the 2025 risk category. Classification only; no verification or compliance assertion."
+    },
+    {
+      "source": "prompt_injection",
+      "target": "mitre-atlas:AML.T0051",
+      "type": "exploited_by",
+      "source_url": "https://github.com/mitre-atlas/atlas-data/blob/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml",
+      "rationale": "Curated relationship to an adversarial technique that exploits this vulnerability class. Does not prove exploitation of any finding."
+    },
+    {
+      "source": "indirect_prompt_injection",
+      "target": "mitre-atlas:AML.T0051.001",
+      "type": "exploited_by",
+      "source_url": "https://github.com/mitre-atlas/atlas-data/blob/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml",
+      "rationale": "Curated relationship to an adversarial technique that exploits this vulnerability class. Does not prove exploitation of any finding."
+    }
+  ]
+}

@@ -53,12 +53,13 @@ type Record struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 type Query struct {
-	Kind         string
-	ReportID     string
-	AssetID      string
-	Limit        int
-	After        string
-	Search       string
+	Kind     string
+	ReportID string
+	AssetID  string
+	Limit    int
+	After    string
+	Search   string
+	// ConnectedTo matches relationship endpoints and classification source_id/target_ids.
 	ConnectedTo  []string
 	FindingKind  string
 	TriageStatus string

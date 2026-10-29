@@ -63,7 +63,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Install the pinned local Julia classifier
+        run: |
+          python3 -m venv "$RUNNER_TEMP/julia-venv"
+          export PIP_NO_CACHE_DIR=1
+          export HF_HOME="$RUNNER_TEMP/julia-download-cache"
+          "$RUNNER_TEMP/julia-venv/bin/pip" install -r scripts/julia/requirements.txt
+          "$RUNNER_TEMP/julia-venv/bin/python" scripts/julia/install.py --model-dir "$RUNNER_TEMP/julia-model"
+          echo "JULIA_PYTHON=$RUNNER_TEMP/julia-venv/bin/python" >> "$GITHUB_ENV"
+          echo "JULIA_MODEL_DIR=$RUNNER_TEMP/julia-model" >> "$GITHUB_ENV"
       - run: make integration
+        env:
+          REQUIRE_JULIA: '1'
 
   container:
     name: Container smoke check

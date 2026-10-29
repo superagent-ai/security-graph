@@ -13,3 +13,10 @@ Changes use monotonically increasing cursors and retain actor, operation, versio
 Search currently uses a bounded result query over JSON content. It is correct but not optimized for a large corpus. Indexed full-text retrieval and a separate search adapter are planned. Core record storage uses typed identity, kind, asset, report, version, and timestamp columns plus JSONB domain payloads. Further typed projections can be added without changing the public model.
 
 A second backend must pass the same real database and MCP workflow integration checks. A fake in-memory adapter is not evidence of production compatibility. PostgreSQL schema migration, credential issuance and revocation live in the reference adapter; other implementations own equivalent persistence and operational guarantees.
+
+The classification extension adds a scoped `classification` record kind.
+`Query.ConnectedTo` must also match classification `data.target_ids` arrays.
+Catalog definitions and assignment edges are immutable/static and current-state
+projections assembled by the shared engine; adapters persist classification
+records with their usual concurrency, audit and idempotency guarantees. See
+[vulnerability classifications](vulnerability-catalog.md).

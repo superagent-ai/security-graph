@@ -10,3 +10,6 @@ credentials.json
 
 # Pinned private app checkout used by native integration CI.
 .superagent-app-ci/
+
+# Local Julia setup/entrypoint bytecode.
+scripts/julia/__pycache__/

@@ -9,11 +9,16 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/contracts"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
-type Engine struct{ Store storage.Store }
+type Engine struct {
+	Store                   storage.Store
+	Classifier              classifier.Classifier
+	ClassificationThreshold float64
+}
 type Call struct {
 	Intent string `json:"intent" jsonschema:"Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets."`
 }
@@ -93,6 +98,9 @@ type CreateAssetInput struct {
 
 func (e *Engine) CreateAsset(ctx context.Context, p storage.Principal, a CreateAssetInput) (json.RawMessage, error) {
 	return e.write(ctx, p, "create_asset", "graph:write", a.WriteCall, a, func(tx storage.Transaction) (any, error) {
+		if strings.HasPrefix(a.AssetID, "catalog:") || strings.HasPrefix(a.AssetID, "classification-edge:") {
+			return nil, fmt.Errorf("%w: reserved graph namespace", contracts.ErrInvalid)
+		}
 		if strings.TrimSpace(a.Name) == "" || strings.TrimSpace(a.Type) == "" || strings.TrimSpace(a.Locator) == "" {
 			return nil, fmt.Errorf("%w: asset name, type and locator required", contracts.ErrInvalid)
 		}
@@ -366,9 +374,9 @@ func (e *Engine) Context(ctx context.Context, p storage.Principal, intent, id st
 	if depth < 0 || depth > 3 || limit < 1 || limit > 100 {
 		return result, fmt.Errorf("%w: depth 0 to 3 and limit 1 to 100 required", contracts.ErrInvalid)
 	}
-	result = ContextResult{Records: []storage.Record{}, MaxDepth: depth, Provenance: "persisted records and explicit relationships"}
+	result = ContextResult{Records: []storage.Record{}, MaxDepth: depth, Provenance: "persisted records, curated catalog and attributed classification projections"}
 	err = e.Store.View(ctx, p, func(tx storage.Reader) error {
-		root, er := tx.Get(ctx, id)
+		root, er := graphGet(ctx, tx, id)
 		if er != nil {
 			return er
 		}
@@ -377,58 +385,53 @@ func (e *Engine) Context(ctx context.Context, p storage.Principal, intent, id st
 		front := []string{id}
 		for d := 0; d < depth && len(front) > 0; d++ {
 			next := []string{}
-			after := ""
-			for {
-				edges, er := tx.List(ctx, storage.Query{Kind: "relationship", Limit: 201, After: after, ConnectedTo: front})
-				if er != nil {
-					return er
+			stop := fmt.Errorf("context_limit")
+			er = graphEdges(ctx, tx, front, func(edge storage.Record) error {
+				var rel contracts.Relationship
+				if err := json.Unmarshal(edge.Data, &rel); err != nil {
+					return err
 				}
-				for _, edge := range edges {
-					var rel contracts.Relationship
-					if json.Unmarshal(edge.Data, &rel) != nil {
+				for _, node := range front {
+					neighbor := ""
+					if rel.SourceID == node {
+						neighbor = rel.TargetID
+					} else if rel.TargetID == node {
+						neighbor = rel.SourceID
+					}
+					if neighbor == "" {
 						continue
 					}
-					for _, node := range front {
-						neighbor := ""
-						if rel.SourceID == node {
-							neighbor = rel.TargetID
-						} else if rel.TargetID == node {
-							neighbor = rel.SourceID
-						}
-						if neighbor == "" {
-							continue
-						}
-						r, er := tx.Get(ctx, neighbor)
-						if er == storage.ErrNotFound {
-							continue
-						}
-						if er != nil {
-							return er
-						}
-						if !seen[edge.ID] {
-							if len(result.Records) >= limit {
-								result.Truncated = true
-								return nil
-							}
-							seen[edge.ID] = true
-							result.Records = append(result.Records, edge)
-						}
-						if seen[neighbor] {
-							continue
-						}
+					r, err := graphGet(ctx, tx, neighbor)
+					if err == storage.ErrNotFound {
+						continue
+					}
+					if err != nil {
+						return err
+					}
+					if !seen[edge.ID] {
 						if len(result.Records) >= limit {
-							result.Truncated = true
-							return nil
+							return stop
+						}
+						seen[edge.ID] = true
+						result.Records = append(result.Records, edge)
+					}
+					if !seen[neighbor] {
+						if len(result.Records) >= limit {
+							return stop
 						}
 						seen[neighbor] = true
 						result.Records = append(result.Records, r)
 						next = append(next, neighbor)
 					}
 				}
-				if len(edges) < 201 {
-					break
-				}
-				after = edges[len(edges)-1].ID
+				return nil
+			})
+			if er == stop {
+				result.Truncated = true
+				return nil
+			}
+			if er != nil {
+				return er
 			}
 			front = next
 		}
