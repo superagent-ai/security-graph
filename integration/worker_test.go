@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/superagent-ai/security-graph/internal/engine"
 	"github.com/superagent-ai/security-graph/internal/server"
 	"github.com/superagent-ai/security-graph/pkg/classifier"
@@ -32,7 +33,11 @@ func TestResidentJuliaMCPWorkflow(t *testing.T) {
 		}
 		t.Skip("run make integration with Julia configured")
 	}
-	if !strings.Contains(url, "test") {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cfg.ConnConfig.Database, "test") {
 		t.Fatal("requires a disposable test database")
 	}
 	ctx := context.Background()
