@@ -33,6 +33,10 @@ type Classifier interface {
 
 var ErrUnavailable = errors.New("local_classifier_unavailable")
 var ErrOutput = errors.New("invalid_classifier_output")
+var ErrTimeout = errors.New("local_classifier_timeout")
+
+const DefaultTimeout = 25 * time.Second
+const MaxTimeout = 2 * time.Minute
 
 // Command runs an operator-configured executable with a bounded JSON protocol.
 // MCP inputs cannot choose its executable, arguments, model or network access.
@@ -44,10 +48,7 @@ type Command struct {
 }
 
 func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
-	timeout := c.Timeout
-	if timeout <= 0 {
-		timeout = 25 * time.Second
-	}
+	timeout := boundedTimeout(c.Timeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	b, err := json.Marshal(in)
@@ -63,12 +64,7 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 	}
 	defer os.RemoveAll(work)
 	cmd.Dir = work
-	cmd.Env = []string{"HOME=" + work, "TMPDIR=" + work, "TMP=" + work, "TEMP=" + work, "HF_HOME=" + work, "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "DO_NOT_TRACK=1", "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1"}
-	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "JULIA_CPU_THREADS"} {
-		if value, ok := os.LookupEnv(key); ok {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
-	}
+	cmd.Env = isolatedEnvironment(work)
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = bytes.NewReader(b)
 	out, err := cmd.StdoutPipe()
@@ -77,6 +73,9 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 	}
 	// Do not forward model diagnostics: they can contain finding text or secrets.
 	if err = cmd.Start(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return Result{}, ErrTimeout
+		}
 		return Result{}, ErrUnavailable
 	}
 	body, err := io.ReadAll(io.LimitReader(out, 65537))
@@ -86,6 +85,9 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 		return Result{}, ErrOutput
 	}
 	if err = cmd.Wait(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return Result{}, ErrTimeout
+		}
 		return Result{}, ErrUnavailable
 	}
 	var result Result
@@ -116,4 +118,24 @@ func Validate(in Request, out Result) error {
 		}
 	}
 	return nil
+}
+
+func isolatedEnvironment(work string) []string {
+	env := []string{"HOME=" + work, "TMPDIR=" + work, "TMP=" + work, "TEMP=" + work, "HF_HOME=" + work, "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "DO_NOT_TRACK=1", "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1"}
+	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "JULIA_CPU_THREADS"} {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
+}
+
+func boundedTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return DefaultTimeout
+	}
+	if timeout > MaxTimeout {
+		return MaxTimeout
+	}
+	return timeout
 }

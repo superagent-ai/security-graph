@@ -246,6 +246,22 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 		}
 	})
 	t.Run("invalid startup configuration and native mode fail closed", func(t *testing.T) {
+		for _, timeout := range []string{"invalid", "0", "500ms", "121s"} {
+			cmd := exec.CommandContext(ctx, binary, "stdio")
+			cmd.Env = append(append([]string{}, env...), "CLASSIFIER_COMMAND=python", "CLASSIFIER_TIMEOUT="+timeout)
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if output, err := cmd.Output(); err == nil || len(output) != 0 || !strings.Contains(stderr.String(), "CLASSIFIER_TIMEOUT must be") {
+				t.Fatalf("invalid classifier timeout accepted or misdiagnosed: %s", timeout)
+			}
+		}
+		invalidWorker := exec.CommandContext(ctx, binary, "stdio")
+		invalidWorker.Env = append(append([]string{}, env...), "CLASSIFIER_COMMAND=python", "CLASSIFIER_MODE=invalid")
+		var workerError bytes.Buffer
+		invalidWorker.Stderr = &workerError
+		if output, err := invalidWorker.Output(); err == nil || len(output) != 0 || !strings.Contains(workerError.String(), "CLASSIFIER_MODE must be") {
+			t.Fatal("invalid classifier mode accepted")
+		}
 		for _, args := range [][]string{{"--scopes", "admin"}, {"--org", " "}, {"--assets", ","}, {"unexpected-argument"}} {
 			cmd := exec.CommandContext(ctx, binary, append([]string{"stdio"}, args...)...)
 			cmd.Env = env

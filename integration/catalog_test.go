@@ -362,21 +362,37 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		t.Setenv("HF_TOKEN", "integration-only-token")
 		t.Setenv("PYTHONPATH", poisonDir)
 		wrapper := filepath.Join(t.TempDir(), "audit-real-classifier.py")
-		code := fmt.Sprintf(`import os, runpy, sys
+		code := fmt.Sprintf(`import os, runpy, sys, time
 from pathlib import Path
 for name in ['DATABASE_URL','TEST_DATABASE_URL','CUSTOM_SERVICE_SECRET','HF_TOKEN','PYTHONPATH','PYTHONSTARTUP']:
     assert name not in os.environ, 'service environment leaked'
 assert Path.cwd().resolve() == Path(os.environ['HOME']).resolve() == Path(os.environ['TMPDIR']).resolve()
 assert os.environ['HF_HUB_OFFLINE'] == os.environ['TRANSFORMERS_OFFLINE'] == '1'
 Path(%q).write_text('isolated')
+# Exercise real inference after a cold start beyond the old HTTP/tool budget.
+time.sleep(31)
 sys.path.insert(0, %q)
 runpy.run_path(%q, run_name='__main__')
 `, auditMarker, filepath.Dir(script), script)
 		if err := os.WriteFile(wrapper, []byte(code), 0600); err != nil {
 			t.Fatal(err)
 		}
+		// Expire a real model invocation before startup, through authenticated MCP.
+		timeoutClient := issue("timeout-"+uuid.NewString(), "", true, "read", "submit", "graph:write")
+		_, timeoutFinding := create(timeoutClient, "timeout")
+		timeoutArgs := writeArgs()
+		timeoutArgs["finding_id"] = timeoutFinding.ID
+		timeoutArgs["expected_version"] = timeoutFinding.Version
+		timeoutArgs["expected_classification_version"] = 0
+		eng.Classifier = classifier.Command{Path: python, Args: []string{script, "--model-dir", prepared}, Timeout: time.Nanosecond}
+		expired := timeoutClient.call(t, "classify_finding", timeoutArgs)
+		failure(t, expired)
+		if !bytes.Contains(expired.Result.Content, []byte("local_classifier_timeout")) {
+			t.Fatal("deadline was not distinguished from startup failure")
+		}
+		failure(t, timeoutClient.call(t, "get_finding_classification", map[string]any{"intent": "Ensure timeout persisted no classification.", "finding_id": timeoutFinding.ID}))
 		model = prepared
-		eng.Classifier = classifier.Command{Path: python, Args: []string{wrapper, "--model-dir", model}}
+		eng.Classifier = classifier.Command{Path: python, Args: []string{wrapper, "--model-dir", model}, Timeout: 90 * time.Second}
 
 		assigned = c.record(t, "classify_finding", modelArgs)
 		if _, err := os.Stat(auditMarker); err != nil {
