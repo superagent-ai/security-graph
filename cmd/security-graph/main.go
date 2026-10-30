@@ -87,7 +87,14 @@ func run() error {
 					return fmt.Errorf("CLASSIFIER_ARGS must be a JSON string array")
 				}
 			}
-			eng.Classifier = classifier.Command{Path: command, Args: args}
+			timeout := classifier.DefaultTimeout
+			if raw := os.Getenv("CLASSIFIER_TIMEOUT"); raw != "" {
+				timeout, err = time.ParseDuration(raw)
+				if err != nil || timeout < time.Second || timeout > classifier.MaxTimeout {
+					return fmt.Errorf("CLASSIFIER_TIMEOUT must be a duration between 1s and 2m")
+				}
+			}
+			eng.Classifier = classifier.Command{Path: command, Args: args, Timeout: timeout}
 		}
 		if raw := os.Getenv("CLASSIFICATION_THRESHOLD"); raw != "" {
 			value, err := strconv.ParseFloat(raw, 64)

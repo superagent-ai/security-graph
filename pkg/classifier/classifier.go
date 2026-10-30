@@ -33,6 +33,10 @@ type Classifier interface {
 
 var ErrUnavailable = errors.New("local_classifier_unavailable")
 var ErrOutput = errors.New("invalid_classifier_output")
+var ErrTimeout = errors.New("local_classifier_timeout")
+
+const DefaultTimeout = 25 * time.Second
+const MaxTimeout = 2 * time.Minute
 
 // Command runs an operator-configured executable with a bounded JSON protocol.
 // MCP inputs cannot choose its executable, arguments, model or network access.
@@ -46,7 +50,10 @@ type Command struct {
 func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 	timeout := c.Timeout
 	if timeout <= 0 {
-		timeout = 25 * time.Second
+		timeout = DefaultTimeout
+	}
+	if timeout > MaxTimeout {
+		timeout = MaxTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -77,6 +84,9 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 	}
 	// Do not forward model diagnostics: they can contain finding text or secrets.
 	if err = cmd.Start(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return Result{}, ErrTimeout
+		}
 		return Result{}, ErrUnavailable
 	}
 	body, err := io.ReadAll(io.LimitReader(out, 65537))
@@ -86,6 +96,9 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 		return Result{}, ErrOutput
 	}
 	if err = cmd.Wait(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return Result{}, ErrTimeout
+		}
 		return Result{}, ErrUnavailable
 	}
 	var result Result

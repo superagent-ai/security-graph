@@ -50,7 +50,11 @@ func (c client) rpc(method string, params any) (rpcResult, error) {
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	res, err := (&http.Client{Timeout: 35 * time.Second}).Do(req)
+	timeout := 35 * time.Second
+	if call, ok := params.(map[string]any); method == "tools/call" && ok && call["name"] == "classify_finding" {
+		timeout = 140 * time.Second
+	}
+	res, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
 		return rpcResult{}, err
 	}

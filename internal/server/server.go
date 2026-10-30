@@ -58,9 +58,11 @@ func Handler(e *engine.Engine, auth Authenticator, version string) http.Handler 
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), classifier.MaxTimeout+15*time.Second)
 		defer cancel()
-		p, err := auth.Authenticate(ctx, parts[1])
+		authCtx, authCancel := context.WithTimeout(ctx, 30*time.Second)
+		p, err := auth.Authenticate(authCtx, parts[1])
+		authCancel()
 		if err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -75,7 +77,7 @@ func safeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, known := range []error{contracts.ErrInvalid, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden, classifier.ErrUnavailable, classifier.ErrOutput, engine.ErrClassifierCapacity} {
+	for _, known := range []error{contracts.ErrInvalid, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden, classifier.ErrUnavailable, classifier.ErrTimeout, classifier.ErrOutput, engine.ErrClassifierCapacity} {
 		if errors.Is(err, known) {
 			return err
 		}
@@ -98,7 +100,12 @@ func add[I any, O any](s *mcp.Server, name, description string, readOnly bool, h
 		cached, _ = inputSchemas.LoadOrStore(typ, schema)
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: name, Description: description, InputSchema: cached, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: readOnly, IdempotentHint: !readOnly, OpenWorldHint: &f}}, func(ctx context.Context, req *mcp.CallToolRequest, in I) (*mcp.CallToolResult, any, error) {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		timeout := 30 * time.Second
+		if name == "classify_finding" {
+			// Leave time to persist the result after bounded cold CPU inference.
+			timeout = classifier.MaxTimeout + 10*time.Second
+		}
+		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		out, err := handler(ctx, in)
 		if err == nil && req.ProtocolVersion() < "2026-07-28" {
