@@ -48,13 +48,7 @@ type Command struct {
 }
 
 func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
-	timeout := c.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	if timeout > MaxTimeout {
-		timeout = MaxTimeout
-	}
+	timeout := boundedTimeout(c.Timeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	b, err := json.Marshal(in)
@@ -70,12 +64,7 @@ func (c Command) Classify(ctx context.Context, in Request) (Result, error) {
 	}
 	defer os.RemoveAll(work)
 	cmd.Dir = work
-	cmd.Env = []string{"HOME=" + work, "TMPDIR=" + work, "TMP=" + work, "TEMP=" + work, "HF_HOME=" + work, "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "DO_NOT_TRACK=1", "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1"}
-	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "JULIA_CPU_THREADS"} {
-		if value, ok := os.LookupEnv(key); ok {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
-	}
+	cmd.Env = isolatedEnvironment(work)
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = bytes.NewReader(b)
 	out, err := cmd.StdoutPipe()
@@ -129,4 +118,24 @@ func Validate(in Request, out Result) error {
 		}
 	}
 	return nil
+}
+
+func isolatedEnvironment(work string) []string {
+	env := []string{"HOME=" + work, "TMPDIR=" + work, "TMP=" + work, "TEMP=" + work, "HF_HOME=" + work, "HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "DO_NOT_TRACK=1", "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1"}
+	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "JULIA_CPU_THREADS"} {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
+}
+
+func boundedTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return DefaultTimeout
+	}
+	if timeout > MaxTimeout {
+		return MaxTimeout
+	}
+	return timeout
 }

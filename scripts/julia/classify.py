@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""One-shot local classifier protocol; no inference-time downloads or telemetry.
+"""One-shot or resident local classifier; no inference downloads or telemetry.
 
 Run with the venv containing the hash-pinned runtime dependencies. The engine supplies
 JSON on stdin. Stdout is protocol-only. Do not invoke this on untrusted model code.
 """
 import argparse
 import contextlib
+import gc
 import json
 import os
 from pathlib import Path
@@ -14,10 +15,10 @@ import sys
 from bundle import REVISION, verify_bundle
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model-dir", required=True)
-    args = parser.parse_args()
+MAX_FRAME = 65536
+
+
+def load(args):
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     model_dir = Path(args.model_dir)
@@ -26,7 +27,19 @@ def main():
     # Validate the complete bundle, then import only from this absolute path.
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(model_dir.resolve()))
-    request = json.load(sys.stdin)
+    with contextlib.redirect_stdout(sys.stderr):
+        from julia import load_model
+        model = load_model(str(model_dir), device="cpu", strict_encoding=True,
+                          max_length=8192, head_length=512,
+                          encoding_cache=0, token_cache=0)
+        # The pinned fast tokenizer has its own Rust BPE word cache, separate
+        # from Julia's Python caches. Disable it before any tenant evidence.
+        model.tokenizer.backend_tokenizer.model._resize_cache(0)
+        model.tokenizer.backend_tokenizer.model._clear_cache()
+        return model
+
+
+def predict(model, request):
     candidates = request["candidates"]
     if not candidates or len(candidates) > 100:
         raise ValueError("invalid candidate count")
@@ -47,9 +60,6 @@ def main():
         }
     # Package startup and model loading must not corrupt stdout framing.
     with contextlib.redirect_stdout(sys.stderr):
-        from julia import load_model
-        model = load_model(str(model_dir), device="cpu", strict_encoding=True,
-                           max_length=8192, head_length=512)
         # Separate calls avoid combined question-head overflow and preserve
         # independent Boolean scores, rather than softmax over unrelated types.
         scores = {}
@@ -57,9 +67,56 @@ def main():
         for key, question in questions.items():
             answer = model.predict(state=state, questions={key: question})
             scores[key] = answer["answers"][key]["probabilities"]["true"]
-    json.dump({"model": "SupersonicLabs/Julia-1", "revision": REVISION,
-               "scores": scores}, sys.stdout, allow_nan=False)
-    sys.stdout.write("\n")
+    return {"model": "SupersonicLabs/Julia-1", "revision": REVISION, "scores": scores}
+
+
+def respond(value):
+    encoded = json.dumps(value, allow_nan=False).encode("utf-8") + b"\n"
+    if len(encoded) > MAX_FRAME:
+        raise ValueError("response exceeds frame limit")
+    sys.stdout.buffer.write(encoded)
+    sys.stdout.buffer.flush()
+
+
+def handle(model, line):
+    frame = json.loads(line)
+    if set(frame) != {"id", "request"} or type(frame["id"]) is not int or frame["id"] < 1:
+        raise ValueError("invalid request frame")
+    try:
+        try:
+            result = predict(model, frame["request"])
+        except ValueError:
+            # Rejected evidence (e.g. reserved markers/context overflow) must
+            # not poison a healthy model or expose text in the error response.
+            return {"id": frame["id"], "error": "classification_failed"}
+        return {"id": frame["id"], "result": result}
+    finally:
+        # No evidence-bearing encoding/token cache survives a tenant request.
+        with contextlib.redirect_stdout(sys.stderr):
+            model.clear_cache()
+            model.tokenizer.backend_tokenizer.model._clear_cache()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-dir", required=True)
+    parser.add_argument("--worker", action="store_true")
+    args = parser.parse_args()
+    if not args.worker:
+        request = json.load(sys.stdin)
+        respond(predict(load(args), request))
+        return
+    model = load(args)
+    respond({"ready": True})
+    while True:
+        line = sys.stdin.buffer.readline(MAX_FRAME + 1)
+        if not line:
+            return
+        if len(line) > MAX_FRAME or not line.endswith(b"\n"):
+            raise ValueError("request exceeds frame limit")
+        respond(handle(model, line))
+        del line
+        gc.collect()
 
 
 if __name__ == "__main__":

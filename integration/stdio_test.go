@@ -255,6 +255,13 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 				t.Fatalf("invalid classifier timeout accepted or misdiagnosed: %s", timeout)
 			}
 		}
+		invalidWorker := exec.CommandContext(ctx, binary, "stdio")
+		invalidWorker.Env = append(append([]string{}, env...), "CLASSIFIER_COMMAND=python", "CLASSIFIER_MODE=invalid")
+		var workerError bytes.Buffer
+		invalidWorker.Stderr = &workerError
+		if output, err := invalidWorker.Output(); err == nil || len(output) != 0 || !strings.Contains(workerError.String(), "CLASSIFIER_MODE must be") {
+			t.Fatal("invalid classifier mode accepted")
+		}
 		for _, args := range [][]string{{"--scopes", "admin"}, {"--org", " "}, {"--assets", ","}, {"unexpected-argument"}} {
 			cmd := exec.CommandContext(ctx, binary, append([]string{"stdio"}, args...)...)
 			cmd.Env = env

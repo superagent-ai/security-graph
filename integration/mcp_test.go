@@ -41,14 +41,41 @@ type rpcResult struct {
 type client struct{ url, token string }
 
 func (c client) rpc(method string, params any) (rpcResult, error) {
+	return c.rpcVersion(context.Background(), method, params, "2025-11-25")
+}
+
+func (c client) rpcContext(ctx context.Context, method string, params any) (rpcResult, error) {
+	// HTTP disconnect cancellation is defined by the modern protocol.
+	return c.rpcVersion(ctx, method, params, "2026-07-28")
+}
+
+func (c client) rpcVersion(ctx context.Context, method string, params any, protocol string) (rpcResult, error) {
+	if protocol >= "2026-07-28" {
+		fields := map[string]any{}
+		for key, value := range params.(map[string]any) {
+			fields[key] = value
+		}
+		fields["_meta"] = map[string]any{
+			"io.modelcontextprotocol/protocolVersion":    protocol,
+			"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+			"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "resident-integration", "version": "1"},
+		}
+		params = fields
+	}
 	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
-	req, err := http.NewRequest(http.MethodPost, c.url+"/mcp", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url+"/mcp", bytes.NewReader(body))
 	if err != nil {
 		return rpcResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.Header.Set("MCP-Protocol-Version", "2025-11-25")
+	req.Header.Set("MCP-Protocol-Version", protocol)
+	if protocol >= "2026-07-28" {
+		req.Header.Set("Mcp-Method", method)
+		if name, ok := params.(map[string]any)["name"].(string); ok {
+			req.Header.Set("Mcp-Name", name)
+		}
+	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	timeout := 35 * time.Second
 	if call, ok := params.(map[string]any); method == "tools/call" && ok && call["name"] == "classify_finding" {
