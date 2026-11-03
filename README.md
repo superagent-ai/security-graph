@@ -12,12 +12,6 @@
   <a href="https://superagent.sh">Website</a> ·
   <a href="#run-locally">Quickstart</a> ·
   <a href="AGENTS.md#using-security-graph">Agent guide</a> ·
-<a href="https://superagent.sh">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.superagent.sh/api/badge/superagent-ai/security-graph/shield.svg?theme=dark&accent=teal&variant=streak">
-    <img alt="Security posture verified by Superagent" src="https://www.superagent.sh/api/badge/superagent-ai/security-graph/shield.svg?theme=light&accent=teal&variant=streak">
-  </picture>
-</a>
 </p>
 
 ---
