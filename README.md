@@ -1,18 +1,54 @@
-# Superagent Security Graph
+<p align="center">
+  <img src="logo.png" width="80" alt="Superagent" />
+</p>
 
-Shared security context for the agents you already use.
+<h1 align="center">Superagent Security Graph</h1>
+
+<p align="center">
+  <strong>Shared security memory for the agents you already use.</strong>
+</p>
+
+<p align="center">
+  <a href="https://superagent.sh">Website</a> ·
+  <a href="#run-locally">Quickstart</a> ·
+  <a href="AGENTS.md#using-security-graph">Agent guide</a> ·
+<a href="https://superagent.sh">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.superagent.sh/api/badge/superagent-ai/security-graph/shield.svg?theme=dark&accent=teal&variant=streak">
+    <img alt="Security posture verified by Superagent" src="https://www.superagent.sh/api/badge/superagent-ai/security-graph/shield.svg?theme=light&accent=teal&variant=streak">
+  </picture>
+</a>
+</p>
+
+---
+
+Security Graph is a security context engine for pentesters, PR reviewers, and coding agents. It stores findings, assessment reports, evidence, and triage decisions, and makes them available through MCP so each agent can build on earlier security work.
 
 ## Why Security Graph?
 
-Pentesters and PR review agents need more than the code in front of them. They need to know which assets are connected, what previous assessments found, and which findings have already been fixed or dismissed.
+An agent reviewing a change needs to know what has already been investigated: which vulnerabilities were reported, how they were reproduced, and why they were fixed, dismissed, or accepted as risk. Security Graph keeps that context available between agents and assessments.
 
-Security Graph gives your agents that context through MCP. They can read findings and reports, follow relationships between assets, and record their own assessment results using Superagent's finding template and report lifecycle.
+- **Before an assessment:** Retrieve existing findings, evidence, and review decisions for the target and related assets.
+- **During an assessment:** Record structured findings with code references, a PoC, and remediation evidence using Superagent's finding template.
+- **After an assessment:** Finish the report and let authorized reviewers update finding dispositions. Later agents can retrieve the results.
 
-- Reduce repeated investigation and give agents the context to distinguish false positives from real issues.
-- Carry knowledge between assessments to shorten the path from finding to fix and make frequent checks less expensive.
-- Use your own agents and models, with data stored in your infrastructure.
+The graph connects security records: assets, reports, findings, and vulnerability classifications. Those relationships let an agent follow a finding back to its assessment or retrieve findings for related assets.
 
-Your agent performs the security assessment. Security Graph stores and shares the context.
+Your agents perform the assessments; Security Graph preserves what they learn. Use your own agents and models, and run the Go service with PostgreSQL on your infrastructure.
+
+## PR scans and pentests
+
+Security Graph can provide shared memory around your existing security workflow. An agent can retrieve earlier context, investigate results from a review or scanner, and record findings for the next assessment.
+
+**Integration status:** Direct agent access through MCP is available today. The vendor connections below are proposed integration patterns; this repository does not yet ship vendor connectors or verify these combinations end to end.
+
+| Tool or method | Workflow | Connection pattern |
+| --- | --- | --- |
+| Your own MCP-capable agent | PR security review or repository pentest | Connect directly to Security Graph to retrieve context and submit structured assessment results. |
+| [Greptile](https://www.greptile.com/docs/mcp/overview) | AI PR review | Have an agent read Greptile review comments through its MCP server, investigate security issues, and record findings in Security Graph. |
+| [CodeRabbit](https://docs.coderabbit.ai/knowledge-base/mcp-context) | AI PR review | Evaluate Security Graph as a custom MCP knowledge source for review context. An agent can separately investigate results from [CodeRabbit's CLI](https://docs.coderabbit.ai/cli) or PR comments. |
+| [Vercel deepsec](https://deepsec.sh/docs/getting-started) | Repository security scans | Have an agent or custom adapter read exported findings and supply the evidence required by Security Graph's submission contract. |
+| [Semgrep](https://semgrep.dev/products/community-edition/) | Static analysis | Have an agent or custom adapter investigate selected JSON or SARIF results and prepare structured findings. |
 
 ## Run locally
 
