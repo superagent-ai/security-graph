@@ -9,3 +9,7 @@ build:
 	CGO_ENABLED=0 go build -trimpath -o bin/security-graph ./cmd/security-graph
 run:
 	go run ./cmd/security-graph serve
+
+.PHONY: seed
+seed:
+	./scripts/seed-demo.sh

@@ -342,6 +342,42 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
+    "description": "Page one entity's authorized neighbors, 1 to 25 edges per page, including endpoint records and provenance. Resume with next_cursor. Pages are live scoped reads, not a cross-request snapshot; refresh after concurrent edits.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "intent": {
+          "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Edges per page; default 25, maximum 25. Nodes are deduplicated within each page.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent",
+        "entity_id"
+      ],
+      "type": "object"
+    },
+    "name": "get_neighbors"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
     "description": "Read one authorized report including current version and full structured content.",
     "inputSchema": {
       "additionalProperties": false,
@@ -427,7 +463,13 @@
         "offset": {
           "type": "integer"
         },
+        "report_id": {
+          "type": "string"
+        },
         "search": {
+          "type": "string"
+        },
+        "source": {
           "type": "string"
         },
         "status": {
@@ -512,7 +554,13 @@
         "offset": {
           "type": "integer"
         },
+        "report_id": {
+          "type": "string"
+        },
         "search": {
+          "type": "string"
+        },
+        "source": {
           "type": "string"
         },
         "status": {
@@ -564,7 +612,13 @@
         "offset": {
           "type": "integer"
         },
+        "report_id": {
+          "type": "string"
+        },
         "search": {
+          "type": "string"
+        },
+        "source": {
           "type": "string"
         },
         "status": {

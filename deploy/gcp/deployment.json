@@ -1,0 +1,52 @@
+{
+  "deployed_at": "2026-11-06T12:56:35.988141Z",
+  "project": "superagent-410019",
+  "region": "europe-west1",
+  "service": "security-graph",
+  "url": "https://security-graph-408394858807.europe-west1.run.app",
+  "mcp_url": "https://security-graph-408394858807.europe-west1.run.app/mcp",
+  "revision": "security-graph-00001-qj5",
+  "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:170f1a10d2b1a59643c6d64fb41b0c0383d904a93db6d564d89f113eba5c61dd",
+  "build_id": "2e23d397-0e0a-4867-99d3-f91bcec8af90",
+  "storage_backend": "superagent",
+  "model": {
+    "name": "SupersonicLabs/Julia-1",
+    "revision": "a85b127321d580d65176c89ced8273f305745d85",
+    "mode": "offline resident CPU worker"
+  },
+  "resources": {
+    "cpu": 2,
+    "memory": "2Gi",
+    "minimum_instances": 1,
+    "maximum_instances": 2,
+    "billing": "request-based"
+  },
+  "database": {
+    "role": "security_graph_runtime",
+    "secret": "security-graph-database-url",
+    "secret_version": 1,
+    "tls": "verify-full",
+    "connection": "session pool"
+  },
+  "verification": {
+    "make_check": "passed",
+    "make_integration_with_real_julia": "passed",
+    "container_http_and_stdio": "passed",
+    "native_app_checks": {
+      "passed": 28,
+      "initial_timeouts": 2,
+      "timed_out_checks_serial_retry": "passed"
+    },
+    "deployed_https_mcp_workflow": "passed",
+    "hosted_app_rest_visibility": "passed",
+    "tenant_isolation": "passed",
+    "julia_scores_and_revision": "passed",
+    "idempotent_replay": "passed",
+    "report_lifecycle": "passed",
+    "test_credential_revocation_both_endpoints": "passed",
+    "synthetic_fixture_cleanup": "passed"
+  },
+  "app_mcp_routing": "Existing www.superagent.sh/mcp routing was not changed by this deployment.",
+  "source_commit": "a31db849dbbbb0fd9880eac7549dc60b9e51f315",
+  "source_includes_uncommitted_workspace_changes": true
+}

@@ -36,7 +36,7 @@ func main() {
 }
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: security-graph serve|stdio|migrate|issue-key|revoke-key|version")
+		return fmt.Errorf("usage: security-graph serve|stdio|migrate|issue-key|revoke-key|seed-demo|version")
 	}
 	if os.Args[1] == "version" {
 		fmt.Println(version)
@@ -56,6 +56,9 @@ func run() error {
 		if err != nil {
 			return err
 		}
+	}
+	if os.Args[1] == "seed-demo" {
+		return seedDemo(ctx, os.Args[2:])
 	}
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {

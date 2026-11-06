@@ -20,3 +20,6 @@ Catalog definitions and assignment edges are immutable/static and current-state
 projections assembled by the shared engine; adapters persist classification
 records with their usual concurrency, audit and idempotency guarantees. See
 [vulnerability classifications](vulnerability-catalog.md).
+
+
+`Query.Source` filters exact canonical `data.source` attribution. Apply it together with the existing organization, target, kind, status, search and keyset constraints; do not implement it as a substring search or allow it to expand access.

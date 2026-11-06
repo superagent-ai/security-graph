@@ -131,6 +131,8 @@ type GetInput struct {
 }
 type ListInput struct {
 	engine.Call
+	Source       string `json:"source,omitempty"`
+	ReportID     string `json:"report_id,omitempty"`
 	AssetID      string `json:"asset_id,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
 	After        string `json:"after,omitempty"`
@@ -171,7 +173,7 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 	for _, entry := range []struct{ name, kind string }{{"list_findings", "finding"}, {"list_reports", "report"}, {"list_assets", "asset"}} {
 		kind := entry.kind
 		add(s, entry.name, "List authorized "+kind+" records with stable ID pagination. Default limit 25; maximum 100.", true, func(ctx context.Context, in ListInput) ([]storage.Record, error) {
-			return e.List(ctx, p, in.Intent, storage.Query{Kind: kind, AssetID: in.AssetID, Limit: in.Limit, After: in.After, Search: in.Search, FindingKind: in.FindingKind, TriageStatus: in.TriageStatus, ReportType: in.ReportType, Status: in.Status, Offset: in.Offset})
+			return e.List(ctx, p, in.Intent, storage.Query{Kind: kind, Source: in.Source, ReportID: in.ReportID, AssetID: in.AssetID, Limit: in.Limit, After: in.After, Search: in.Search, FindingKind: in.FindingKind, TriageStatus: in.TriageStatus, ReportType: in.ReportType, Status: in.Status, Offset: in.Offset})
 		})
 	}
 	add(s, "get_vulnerability_catalog", "Read the immutable vulnerability types, hierarchy, framework releases and sourced mappings. Catalog IDs cannot be created by agents.", true, func(ctx context.Context, in engine.Call) (any, error) { return e.Catalog(p, in.Intent) })
@@ -182,6 +184,9 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 	add(s, "classify_finding", "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions. Capacity is bounded; retry capacity errors with the same key and payload after 60 seconds.", false, func(ctx context.Context, in engine.ClassifyInput) (any, error) { return e.ClassifyFinding(ctx, p, in) })
 	add(s, "get_context", "Retrieve an authorized graph neighborhood. Depth 0 to 3, limit 1 to 100; returns provenance and truncation.", true, func(ctx context.Context, in ContextInput) (engine.ContextResult, error) {
 		return e.Context(ctx, p, in.Intent, in.EntityID, in.Depth, in.Limit)
+	})
+	add(s, "get_neighbors", "Page one entity's authorized neighbors, 1 to 25 edges per page, including endpoint records and provenance. Resume with next_cursor. Pages are live scoped reads, not a cross-request snapshot; refresh after concurrent edits.", true, func(ctx context.Context, in engine.NeighborsInput) (engine.NeighborsResult, error) {
+		return e.Neighbors(ctx, p, in)
 	})
 	add(s, "list_changes", "Read the scoped durable change feed after a cursor. Requires export permission; maximum 100 records.", true, func(ctx context.Context, in ChangesInput) ([]storage.Change, error) {
 		return e.Changes(ctx, p, in.Intent, in.After, in.Limit)

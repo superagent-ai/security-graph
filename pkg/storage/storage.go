@@ -53,6 +53,8 @@ type Record struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 type Query struct {
+	// Source selects exact canonical submitter attribution, not text matches.
+	Source   string
 	Kind     string
 	ReportID string
 	AssetID  string

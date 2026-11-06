@@ -81,8 +81,8 @@ func (e *Engine) List(ctx context.Context, p storage.Principal, intent string, q
 	if q.Limit == 0 {
 		q.Limit = 25
 	}
-	if q.Limit < 1 || q.Limit > 100 || len(q.Search) > 500 || q.Offset < 0 || q.Offset > 10000 || (q.After != "" && q.Offset != 0) {
-		return nil, fmt.Errorf("%w: limit must be 1 to 100; search at most 500 characters", contracts.ErrInvalid)
+	if q.Limit < 1 || q.Limit > 100 || len(q.Search) > 500 || len(q.Source) > 500 || q.Offset < 0 || q.Offset > 10000 || (q.After != "" && q.Offset != 0) {
+		return nil, fmt.Errorf("%w: limit must be 1 to 100; search and source at most 500 characters", contracts.ErrInvalid)
 	}
 	err = e.Store.View(ctx, p, func(tx storage.Reader) error { var er error; out, er = tx.List(ctx, q); return er })
 	return

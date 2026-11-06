@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/superagent-ai/security-graph/pkg/catalog"
@@ -15,13 +16,17 @@ import (
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
-func currentCatalog() catalog.Catalog {
+// The reviewed catalog is immutable and contains no tenant data. Decode and
+// validate it once instead of repeating that work for each projected neighbor.
+var immutableCatalog = sync.OnceValue(func() catalog.Catalog {
 	c, err := catalog.Load()
 	if err != nil {
 		panic(err)
 	}
 	return c
-}
+})
+
+func currentCatalog() catalog.Catalog { return immutableCatalog() }
 func (e *Engine) Catalog(p storage.Principal, intent string) (catalog.Catalog, error) {
 	if err := authorize(p, intent, "read"); err != nil {
 		return catalog.Catalog{}, err

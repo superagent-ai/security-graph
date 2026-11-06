@@ -104,11 +104,19 @@ Every tool call requires an `intent` describing its purpose. The agent discovers
 
 The MCP process exits when your agent disconnects. To stop PostgreSQL while keeping its data, run `docker compose down`.
 
+## Demo data
+
+After preparing the local database, run `make seed` to add 2,000 dummy findings from eight PR scanner, dependency auditor, and red-team identities, with 60 assets, 120 reports, classifications, and graph relationships. Data stays in the isolated `demo-security-graph` organization. Identical reruns resume without duplicating domain records.
+
+Customize the volume with `./scripts/seed-demo.sh --findings 10000 --assets 200 --reports 400 --org demo-large`. See the [demo data guide](docs/demo-data.md) for MCP access, lifecycle variety, and host-run usage.
+
 ## Use it with your infrastructure
 
 **Standalone / on-prem:** Run the same service against your own PostgreSQL database. For shared remote access, use authenticated HTTP behind HTTPS; see [HTTP credentials](AGENTS.md#http-credentials-and-client-configuration). Other databases can be supported through the [storage adapter interface](docs/storage-adapters.md).
 
 **Native Superagent:** Run the service against the existing App database and configure App to forward MCP calls to it. Agents use their existing Superagent API keys; organization access comes from the key. This requires the App migration and service configuration described in the [native integration guide](docs/superagent-integration.md).
+
+For a native deployment on Google Cloud Run with the offline Julia-1 classifier, see the [Cloud Run deployment guide](docs/cloud-run-deployment.md).
 
 ## More
 
