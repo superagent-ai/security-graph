@@ -296,3 +296,46 @@ func (s *Store) IssueKey(ctx context.Context, token string, p storage.Principal,
 }
 
 var _ storage.Store = (*Store)(nil)
+
+func (s *Store) NativeContext(ctx context.Context, p storage.Principal, q *storage.NativeQuery) (json.RawMessage, error) {
+	n, ok := s.Native.(NativeExecution)
+	if !ok {
+		return nil, storage.ErrForbidden
+	}
+	return n.NativeContext(ctx, s, p, q)
+}
+func (t *transaction) SaveNativeFinding(ctx context.Context, payload json.RawMessage) (storage.Record, error) {
+	n, ok := t.native.(NativeExecution)
+	if !ok {
+		return storage.Record{}, storage.ErrForbidden
+	}
+	r, err := n.SaveNativeFinding(ctx, t.tx, t.p, payload)
+	if err != nil {
+		return r, err
+	}
+	return r, t.audit(ctx, r)
+}
+func (t *transaction) ReplaceNativePRFindings(ctx context.Context, payload json.RawMessage) (json.RawMessage, error) {
+	n, ok := t.native.(NativeExecution)
+	if !ok {
+		return nil, storage.ErrForbidden
+	}
+	result, err := n.ReplaceNativePRFindings(ctx, t.tx, t.p, payload)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	if err = json.Unmarshal(result, &ids); err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		r, e := t.native.Get(ctx, t.tx, t.p, id)
+		if e != nil {
+			return nil, e
+		}
+		if e = t.audit(ctx, r); e != nil {
+			return nil, e
+		}
+	}
+	return result, nil
+}

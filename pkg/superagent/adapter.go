@@ -33,6 +33,9 @@ func Enable(ctx context.Context, s *postgres.Store) error {
 }
 func (a *Adapter) Authenticate(ctx context.Context, s *postgres.Store, token string) (storage.Principal, error) {
 	var p storage.Principal
+	if strings.HasPrefix(token, "sg_native_") {
+		return a.authenticateNative(ctx, s, token)
+	}
 	if !strings.HasPrefix(token, "sk_live_") {
 		return p, storage.ErrForbidden
 	}

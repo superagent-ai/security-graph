@@ -413,8 +413,16 @@ runpy.run_path(%q, run_name='__main__')
 				t.Fatal("invalid model score")
 			}
 		}
-		if cl.Method != "model_suggested" || (cl.Status != "suggested" && cl.Status != "unclassified") {
+		if cl.Method != "model_suggested" || cl.Status != "suggested" || len(cl.TypeIDs) != 1 || cl.SelectionPolicy != engine.PrimaryTypeSelectionPolicy {
 			t.Fatal("model result treated as accepted classification")
+		}
+		if cl.Confidence != cl.Model.Scores[cl.TypeIDs[0]] || cl.BelowThreshold != (cl.Confidence < cl.Threshold) {
+			t.Fatal("best-match confidence metadata is inconsistent")
+		}
+		for _, score := range cl.Model.Scores {
+			if score > cl.Confidence {
+				t.Fatal("model suggestion did not select the highest-scoring category")
+			}
 		}
 		graph := contextAt(scoped, f.ID, 1)
 		for _, record := range graph.Records {

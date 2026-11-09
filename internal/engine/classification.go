@@ -46,17 +46,23 @@ type SetTypesInput struct {
 	Rationale string   `json:"rationale"`
 }
 type Classification struct {
-	SourceID       string             `json:"source_id"`
-	FindingVersion int64              `json:"finding_version"`
-	CatalogVersion string             `json:"catalog_version"`
-	TypeIDs        []string           `json:"type_ids"`
-	TargetIDs      []string           `json:"target_ids"`
-	Method         string             `json:"method"`
-	Status         string             `json:"status"`
-	Rationale      string             `json:"rationale,omitempty"`
-	Model          *classifier.Result `json:"model,omitempty"`
-	Threshold      float64            `json:"threshold,omitempty"`
+	SourceID          string             `json:"source_id"`
+	FindingVersion    int64              `json:"finding_version"`
+	CatalogVersion    string             `json:"catalog_version"`
+	TypeIDs           []string           `json:"type_ids"`
+	TargetIDs         []string           `json:"target_ids"`
+	Method            string             `json:"method"`
+	Status            string             `json:"status"`
+	Rationale         string             `json:"rationale,omitempty"`
+	Model             *classifier.Result `json:"model,omitempty"`
+	EvidenceTruncated bool               `json:"evidence_truncated,omitempty"`
+	Threshold         float64            `json:"threshold,omitempty"`
+	SelectionPolicy   string             `json:"selection_policy,omitempty"`
+	Confidence        float64            `json:"confidence,omitempty"`
+	BelowThreshold    bool               `json:"below_threshold,omitempty"`
 }
+
+const PrimaryTypeSelectionPolicy = "best_match_v1"
 
 func classificationID(org, finding string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("classification\x00"+org+"\x00"+finding)).String()
@@ -169,10 +175,49 @@ func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in Cl
 		return nil, err
 	}
 	// Supply authored evidence, not intent, credentials, or a claimed CWE label.
+	evidenceTruncated := false
+	var native struct {
+		Evidence json.RawMessage `json:"evidence"`
+	}
+	_ = json.Unmarshal(f.Data, &native)
+	nativeEvidence := ""
+	if len(native.Evidence) > 0 && string(native.Evidence) != "null" {
+		nativeEvidence = string(native.Evidence)
+	}
+	if len(finding.Triage.Evidence) > 0 && string(finding.Triage.Evidence) != "null" {
+		nativeEvidence += string(finding.Triage.Evidence)
+	}
+	// Automated suggestions use bounded excerpts of large native reports. Manual
+	// MCP calls retain their explicit 16-KiB input guard.
+	if p.ActorID == "system:security-graph-classifier" {
+		clip := func(value string, max int) string {
+			if len(value) <= max {
+				return value
+			}
+			evidenceTruncated = true
+			return strings.ToValidUTF8(value[:max], "")
+		}
+		nativeEvidence = clip(nativeEvidence, 2000)
+		finding.Title = clip(finding.Title, 1000)
+		finding.Description = clip(finding.Description, 5000)
+		finding.Submission.Summary = clip(finding.Submission.Summary, 1000)
+		finding.Submission.Details = clip(finding.Submission.Details, 2000)
+		finding.Submission.Impact = clip(finding.Submission.Impact, 1000)
+		finding.Submission.Proof = clip(finding.Submission.Proof, 2000)
+		if len(finding.Submission.CodeReferences) > 4 {
+			finding.Submission.CodeReferences = finding.Submission.CodeReferences[:4]
+			evidenceTruncated = true
+		}
+		for i := range finding.Submission.CodeReferences {
+			finding.Submission.CodeReferences[i].Excerpt = clip(finding.Submission.CodeReferences[i].Excerpt, 500)
+			finding.Submission.CodeReferences[i].Reason = clip(finding.Submission.CodeReferences[i].Reason, 250)
+		}
+	}
+
 	state := data(struct {
-		Title, Description, Summary, Details, Impact, Proof string
-		References                                          []contracts.CodeReference
-	}{finding.Title, finding.Description, finding.Submission.Summary, finding.Submission.Details, finding.Submission.Impact, finding.Submission.Proof, finding.Submission.CodeReferences})
+		Title, Description, Summary, Details, Impact, Proof, NativeEvidence string
+		References                                                          []contracts.CodeReference
+	}{finding.Title, finding.Description, finding.Submission.Summary, finding.Submission.Details, finding.Submission.Impact, finding.Submission.Proof, nativeEvidence, finding.Submission.CodeReferences})
 	if len(state) > 16384 {
 		return nil, fmt.Errorf("%w: classifier evidence exceeds 16 KiB", contracts.ErrInvalid)
 	}
@@ -197,13 +242,16 @@ func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in Cl
 	if math.IsNaN(threshold) || threshold <= 0 || threshold > 1 {
 		return nil, fmt.Errorf("invalid classifier threshold")
 	}
-	ids := []string{}
+	bestID, bestScore := "", -1.0
 	for id, score := range decision.Scores {
-		if score >= threshold {
-			ids = append(ids, id)
+		if score > bestScore || (score == bestScore && (bestID == "" || id < bestID)) {
+			bestID, bestScore = id, score
 		}
 	}
-	sort.Strings(ids)
+	if bestID == "" {
+		return nil, classifier.ErrOutput
+	}
+	ids := []string{bestID}
 	return e.write(ctx, p, "classify_finding", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
 		latest, err := tx.Get(ctx, in.FindingID)
 		if err != nil {
@@ -212,7 +260,7 @@ func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in Cl
 		if latest.Kind != "finding" || latest.Version != f.Version {
 			return nil, storage.ErrConflict
 		}
-		return saveClassification(ctx, tx, p, latest, in.ExpectedClassificationVersion, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: c.Version, TypeIDs: ids, Method: "model_suggested", Model: &decision, Threshold: threshold})
+		return saveClassification(ctx, tx, p, latest, in.ExpectedClassificationVersion, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: c.Version, TypeIDs: ids, Method: "model_suggested", Model: &decision, Threshold: threshold, EvidenceTruncated: evidenceTruncated, SelectionPolicy: PrimaryTypeSelectionPolicy, Confidence: bestScore, BelowThreshold: bestScore < threshold})
 	})
 }
 

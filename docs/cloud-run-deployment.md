@@ -52,6 +52,15 @@ and latency before increasing replica counts or reducing memory. Request-based
 billing is used; the warm instance incurs idle charges. The earlier Go-only
 512 MiB cost estimate does not apply to this model-enabled deployment.
 
+For automatic native-finding classification, deploy the compatible native MCP
+execution build and apply the App's native execution migration. Set
+`AUTO_CLASSIFY_FINDINGS=1` and use `--no-cpu-throttling` on Cloud Run: the durable
+classification worker runs after the save request has returned and needs CPU
+between requests. Keep one warm instance. This uses instance-based CPU billing;
+manual-only deployments can retain request-based CPU allocation. Julia runs in
+the deployed Graph container, including when its database is reached through a
+local-development tunnel; it does not run on the App developer's computer.
+
 Cloud Run allows requests through its platform IAM layer so the existing App can
 forward MCP without a second authentication protocol. The Go service still
 requires a valid existing Superagent bearer key on every MCP request. Missing,

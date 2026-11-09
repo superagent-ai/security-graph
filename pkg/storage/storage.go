@@ -15,11 +15,15 @@ var (
 )
 
 type Principal struct {
-	OrganizationID string   `json:"organization_id"`
-	ActorID        string   `json:"actor_id"`
-	Scopes         []string `json:"scopes"`
-	AssetIDs       []string `json:"asset_ids"`
-	AllAssets      bool     `json:"all_assets"`
+	OrganizationID  string   `json:"organization_id"`
+	ActorID         string   `json:"actor_id"`
+	Scopes          []string `json:"scopes"`
+	AssetIDs        []string `json:"asset_ids"`
+	AllAssets       bool     `json:"all_assets"`
+	NativeRunID     string   `json:"native_run_id,omitempty"`
+	NativeModality  string   `json:"native_modality,omitempty"`
+	NativeAgentID   string   `json:"native_agent_id,omitempty"`
+	NativeTokenHash string   `json:"-"`
 }
 
 func (p Principal) Allows(scope string) bool {
@@ -103,4 +107,20 @@ type Store interface {
 	Update(context.Context, Principal, Call, func(Transaction) (any, error)) (json.RawMessage, error)
 	Ping(context.Context) error
 	Close()
+}
+
+// NativeAccess is implemented only by the canonical App adapter. Native
+// credentials are short-lived capabilities minted by the trusted App server.
+type NativeQuery struct {
+	Query    string `json:"query,omitempty"`
+	RecordID string `json:"record_id,omitempty"`
+	After    string `json:"after,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+}
+type NativeReader interface {
+	NativeContext(context.Context, Principal, *NativeQuery) (json.RawMessage, error)
+}
+type NativeWriter interface {
+	SaveNativeFinding(context.Context, json.RawMessage) (Record, error)
+	ReplaceNativePRFindings(context.Context, json.RawMessage) (json.RawMessage, error)
 }

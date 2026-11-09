@@ -162,7 +162,7 @@ classify.main()
 		start := time.Now()
 		r := c.record(t, "classify_finding", args)
 		var assignment engine.Classification
-		if json.Unmarshal(r.Data, &assignment) != nil || assignment.Model == nil || len(assignment.Model.Scores) != 16 || assignment.Method != "model_suggested" {
+		if json.Unmarshal(r.Data, &assignment) != nil || assignment.Model == nil || len(assignment.Model.Scores) != 16 || assignment.Method != "model_suggested" || len(assignment.TypeIDs) != 1 || assignment.SelectionPolicy != engine.PrimaryTypeSelectionPolicy {
 			t.Fatal("missing real model scores/provenance")
 		}
 		t.Logf("Resident Julia MCP request: %s", time.Since(start))

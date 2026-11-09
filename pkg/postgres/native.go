@@ -14,3 +14,9 @@ type Native interface {
 	Put(context.Context, pgx.Tx, storage.Principal, storage.Record, int64) (storage.Record, error)
 	Authenticate(context.Context, *Store, string) (storage.Principal, error)
 }
+
+type NativeExecution interface {
+	NativeContext(context.Context, *Store, storage.Principal, *storage.NativeQuery) ([]byte, error)
+	SaveNativeFinding(context.Context, pgx.Tx, storage.Principal, []byte) (storage.Record, error)
+	ReplaceNativePRFindings(context.Context, pgx.Tx, storage.Principal, []byte) ([]byte, error)
+}

@@ -171,6 +171,23 @@ func run() error {
 		}
 		return err
 	case "serve":
+		if os.Getenv("AUTO_CLASSIFY_FINDINGS") == "1" {
+			if backend != "superagent" || eng.Classifier == nil {
+				return fmt.Errorf("AUTO_CLASSIFY_FINDINGS requires native Superagent storage and a configured classifier")
+			}
+			var queueReady bool
+			if err = store.Pool.QueryRow(ctx, "SELECT CASE WHEN to_regclass('security_graph.classification_jobs') IS NOT NULL THEN has_table_privilege(current_user,'security_graph.classification_jobs','SELECT') AND has_table_privilege(current_user,'security_graph.classification_jobs','INSERT') AND has_table_privilege(current_user,'security_graph.classification_jobs','UPDATE') ELSE false END").Scan(&queueReady); err != nil || !queueReady {
+				return fmt.Errorf("apply the native MCP execution App migration and runtime grants before enabling automatic classification")
+			}
+			workerCtx, stopWorker := context.WithCancel(ctx)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				eng.RunClassificationWorker(workerCtx, superagent.ClassificationQueue{Store: store})
+			}()
+			defer func() { stopWorker(); <-done }()
+		}
+
 		addr := os.Getenv("LISTEN_ADDR")
 		if addr == "" {
 			addr = "127.0.0.1:8080"

@@ -11,6 +11,7 @@ import (
 )
 
 var ErrInvalid = errors.New("invalid_request")
+var ErrNativeContextReadRequired = errors.New("native_context_read_required: search security-graph history before saving findings")
 
 const (
 	New      = "new"

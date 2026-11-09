@@ -43,3 +43,66 @@ The app native workflow checks out the pinned engine source using `SECURITY_GRAP
 This repository also runs the real native workflow for every trusted pull request and main push. `SUPERAGENT_APP_DEPLOY_KEY` is a separate read-only app-repository deploy key; `SUPERAGENT_APP_INTEGRATION_REF` selects an immutable app commit. Neither key grants writes or access to other repositories. Missing credentials or pins fail the check rather than silently skipping it. Fork pull requests do not receive these secrets.
 
 Rotate a credential by replacing its consuming repository secret and then removing the old deploy key from the source repository. The native check starts real local Supabase, applies migrations, launches the current engine with the pinned app and exercises the same MCP/REST integration scenarios as local development.
+
+
+## Native assessment execution
+
+The compatible App migration `20261109083236_native_security_graph_mcp_execution.sql`
+adds server-only native capabilities, history-search receipts and classification
+jobs. Existing organization API keys continue to work. Native runners still use
+their App callbacks; those credentials are never accepted by MCP. The App mints
+short-lived `sg_native_` capabilities only on its trusted server. Each capability
+selects one live run, organization, asset and publishing agent, with read access
+or explicit native submission authority. The App revokes it after the request;
+expiry and live runner checks prevent reuse after completion or revocation.
+
+The native-only `get_native_context`, `search_native_context`,
+`save_native_finding` and `replace_native_pr_findings` tools are advertised only
+for this audience. Public API keys cannot invoke them. Standard mutations and
+report/disposition ownership are not granted to native capabilities. The App
+still verifies peer review and normalizes modality-owned findings before calling
+the native save operation. Graph writes canonical App rows and commits audit,
+idempotency, notification and inference intents together. There is no second
+finding store. PR replacement is atomic and preserves durable reviewer feedback.
+
+The service records successful native history searches and rejects publication
+without a receipt for that run and publishing agent. A startup snapshot or
+another peer's search does not satisfy this requirement. The App's agent-facing
+MCP bridge carries evidence as untrusted tool data and keeps free-form history
+out of startup instructions.
+
+Apply the migration before deploying the new service and App. Existing trusted
+Graph runtime roles are granted the additional least-privilege access by the
+migration's final block; newly provisioned runtime roles need those same grants.
+No browser role receives access. Native capabilities stay entirely on the App
+server and never enter sandbox configuration or model context.
+
+## Automatic classification
+
+Set `AUTO_CLASSIFY_FINDINGS=1` with the existing verified local classifier on a
+native Graph deployment. The service consumes durable, leased
+`security_graph.classification_jobs` intents committed with canonical findings.
+It invokes the same classification engine operation used by `classify_finding`,
+retains suggestions and model provenance, and retries temporary failures without
+blocking finding saves. Reviewed manual assignments are preserved. Superseded
+versions are skipped and surviving changed versions are queued again, including
+PR findings whose source version changes at scan completion. Automatic evidence
+excerpts are bounded and marked when truncated. Manual calls retain their
+existing evidence-size guard. The worker never changes verification, triage,
+resolution, reports or GitHub publication. Default/manual-only deployments keep
+automatic processing disabled; setting the flag to `0` retains pending jobs.
+
+Capacity deferrals use the model admission's actual remaining cooldown, or a
+short retry when another request owns the model. They do not consume the job's
+failure-attempt budget or trigger exponential failure backoff. The worker leaves
+work pending while its process's model is occupied; other eligible organizations
+can run when one organization is cooling down. Claims clear previous errors, and
+lease fencing and expired-lease recovery remain in effect. Model failures still
+use exponential backoff. On upgrading an older queue, reschedule legacy pending
+`classifier_capacity` jobs once so old exponential delays are not retained.
+
+Successful model inference selects one best-matching primary category, using
+Julia's categorical choice interface. Scores and the `best_match_v1` selection
+policy are persisted. The 0.95 threshold marks low-confidence suggestions instead
+of discarding their category. Policy-versioned worker receipts permit existing
+model suggestions to be refreshed without replacing reviewed manual assignments.

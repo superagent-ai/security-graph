@@ -69,7 +69,7 @@ Revoke every credential for an agent:
 docker compose run --rm server revoke-key --org acme --actor local-agent
 ```
 
-Standalone HTTP authentication uses deployment-issued bearer keys. Native mode uses existing app API keys. Neither mode accepts arbitrary browser session tokens; OAuth/OIDC federation is a future integration.
+Standalone HTTP authentication uses deployment-issued bearer keys. Native mode uses existing app API keys for customer clients. The App server can also mint five-minute, run/asset-scoped `sg_native_` capabilities for guarded native execution; runner credentials themselves remain invalid MCP credentials. Neither mode accepts arbitrary browser session tokens; OAuth/OIDC federation is a future integration.
 
 ### Agent workflow
 

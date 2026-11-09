@@ -48,5 +48,61 @@
   },
   "app_mcp_routing": "Existing www.superagent.sh/mcp routing was not changed by this deployment.",
   "source_commit": "a31db849dbbbb0fd9880eac7549dc60b9e51f315",
-  "source_includes_uncommitted_workspace_changes": true
+  "source_includes_uncommitted_workspace_changes": true,
+  "native_execution_upgrade": {
+    "deployed_at": "2026-11-09T11:36:14Z",
+    "revision": "security-graph-00003-8dm",
+    "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:516ed61266c03316536af88baeaa7ec7720576d13e56909154c564a413706617",
+    "build_id": "9dc70b68-58b2-46bb-8633-31841b1b2cf3",
+    "database_secret": "security-graph-local-test-database-url",
+    "database_secret_version": 1,
+    "automatic_classification": true,
+    "cpu_throttling": false,
+    "verification": {
+      "app_native_context_http_status": 200,
+      "native_mcp_search": "passed",
+      "native_mcp_save": "passed",
+      "automatic_julia_classification": "completed model_suggested SupersonicLabs/Julia-1",
+      "isolated_fixture_cleanup": "passed"
+    },
+    "source_includes_uncommitted_workspace_changes": true
+  },
+  "categorical_classification_upgrade": {
+    "revision": "security-graph-00005-sgz",
+    "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:a0f63a0f93c0f58f0975f030dcdb2601c421bc56e96fc86c4af9d69849acecbd",
+    "build_id": "c7add0c3-eb50-4b5d-b127-d3e77487817b",
+    "integration_build_id": "8deef359-0415-4f7a-b5d9-bd3a7815d0fe",
+    "selection_policy": "best_match_v1",
+    "model_interface": "single categorical choice over catalog type names",
+    "threshold_behavior": "marks below_threshold; never suppresses primary type",
+    "verification": {
+      "make_check": "passed in Cloud Build",
+      "make_integration": "passed in Cloud Build",
+      "real_julia_command_injection": "passed",
+      "deployed_mcp_primary_type_persistence": "passed",
+      "deployed_mcp_below_threshold_category_persistence": "passed",
+      "isolated_fixture_cleanup": "passed"
+    },
+    "known_accuracy_limitation": "A tenant authorization fixture was classified as SQL injection with a below-threshold score. Suggestions require review.",
+    "source_includes_uncommitted_workspace_changes": true
+  },
+  "capacity_retry_upgrade": {
+    "revision": "security-graph-00006-gnt",
+    "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:4092fba44be2fe72c70f0a598ee539600d2528409f942cddcb3d8f5bb732fb96",
+    "build_id": "8d78858b-ebbd-4a55-8ace-769b885752f2",
+    "capacity_retry": "actual remaining admission cooldown; two-second retry for occupied model",
+    "capacity_deferrals_consume_failure_budget": false,
+    "model_concurrency_and_rate_limits": "unchanged",
+    "verification": {
+      "make_check": "passed in Cloud Build",
+      "make_integration": "passed in Cloud Build",
+      "queue_retry_and_failure_budget_contract": "passed",
+      "lease_recovery_and_fencing": "passed",
+      "deferred_tenant_fairness": "passed",
+      "deployed_three_finding_same_organization_burst": "all three automatically classified with one inference attempt each; no manual rescheduling",
+      "deployed_classification_reads": "passed via MCP",
+      "isolated_fixture_cleanup": "passed"
+    },
+    "source_includes_uncommitted_workspace_changes": true
+  }
 }

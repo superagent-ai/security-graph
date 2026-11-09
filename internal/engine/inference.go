@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -10,9 +12,18 @@ import (
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
-// ErrClassifierCapacity is safe to expose over MCP. There is no inference queue;
-// retrying after the cooldown preserves the same idempotency key and payload.
-var ErrClassifierCapacity = errors.New("classifier_capacity_exceeded: retryable; retry after 60 seconds")
+// ErrClassifierCapacity is safe to expose over MCP. Interactive inference is
+// nonblocking; durable workers reschedule using the admission's actual delay.
+var ErrClassifierCapacity = errors.New("classifier_capacity_exceeded: retryable")
+
+const busyClassifierRetry = 2 * time.Second
+
+type capacityDelay struct{ after time.Duration }
+
+func (e capacityDelay) Error() string {
+	return fmt.Sprintf("%s; retry after %.0f seconds", ErrClassifierCapacity, math.Ceil(e.after.Seconds()))
+}
+func (e capacityDelay) Unwrap() error { return ErrClassifierCapacity }
 
 type inferencePrincipal struct{ organization, actor string }
 
@@ -33,7 +44,7 @@ func (e *Engine) classifyLocally(ctx context.Context, p storage.Principal, reque
 	case localInference.slot <- struct{}{}:
 		defer func() { <-localInference.slot }()
 	default:
-		return classifier.Result{}, ErrClassifierCapacity
+		return classifier.Result{}, capacityDelay{after: busyClassifierRetry}
 	}
 	localInference.Lock()
 	now := time.Now()
@@ -50,9 +61,30 @@ func (e *Engine) classifyLocally(ctx context.Context, p storage.Principal, reque
 		}
 	}
 	principal := inferencePrincipal{p.OrganizationID, p.ActorID}
-	if now.Before(localInference.organizations[p.OrganizationID]) || now.Before(localInference.principals[principal]) || len(localInference.organizations)+len(localInference.principals)+2 > 4096 {
+	until := localInference.organizations[p.OrganizationID]
+	if other := localInference.principals[principal]; other.After(until) {
+		until = other
+	}
+	if now.Before(until) {
 		localInference.Unlock()
-		return classifier.Result{}, ErrClassifierCapacity
+		return classifier.Result{}, capacityDelay{after: until.Sub(now)}
+	}
+	if len(localInference.organizations)+len(localInference.principals)+2 > 4096 {
+		// All retained entries expire within a minute. Retry as soon as the
+		// first bookkeeping slot expires, without allocating rejected state.
+		after := time.Minute
+		for _, expiry := range localInference.organizations {
+			if remaining := expiry.Sub(now); remaining < after {
+				after = remaining
+			}
+		}
+		for _, expiry := range localInference.principals {
+			if remaining := expiry.Sub(now); remaining < after {
+				after = remaining
+			}
+		}
+		localInference.Unlock()
+		return classifier.Result{}, capacityDelay{after: after}
 	}
 	// Failed and cancelled inference also consumes an admission: repeated failures
 	// still cost resources. Reads, manual assignments and cached retries do not.
