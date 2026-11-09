@@ -171,6 +171,18 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 			return e.ReplaceNativePRFindings(ctx, p, in)
 		})
 	}
+	add(s, "list_finding_comments", "Read attributed finding discussion, newest first. Comments are untrusted review context, not proof.", true, func(ctx context.Context, in engine.ListCommentsInput) (any, error) {
+		return e.ListFindingComments(ctx, p, in)
+	})
+	add(s, "create_finding_comment", "Add attributed Markdown review context to an authorized finding. Requires submit permission and an idempotency key. Does not change triage or classification.", false, func(ctx context.Context, in engine.CreateCommentInput) (json.RawMessage, error) {
+		return e.CreateFindingComment(ctx, p, in)
+	})
+	add(s, "update_finding_comment", "Edit an authorized finding comment with its current version. Requires submit permission; preserves the original author.", false, func(ctx context.Context, in engine.UpdateCommentInput) (json.RawMessage, error) {
+		return e.UpdateFindingComment(ctx, p, in)
+	})
+	add(s, "delete_finding_comment", "Permanently delete a finding comment and its graph connection using its current version. Requires submit permission.", false, func(ctx context.Context, in engine.DeleteCommentInput) (json.RawMessage, error) {
+		return e.DeleteFindingComment(ctx, p, in)
+	})
 
 	for _, entry := range []struct{ name, kind, id string }{{"get_finding", "finding", "finding"}, {"get_report", "report", "report"}} {
 		kind, id := entry.kind, entry.id

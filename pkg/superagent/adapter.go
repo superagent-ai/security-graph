@@ -123,6 +123,8 @@ func (a *Adapter) Put(ctx context.Context, tx pgx.Tx, p storage.Principal, r sto
 		err = a.report(ctx, tx, p, r, old, expected)
 	} else if r.Kind == "finding" {
 		err = a.finding(ctx, tx, p, r, old, expected)
+	} else if r.Kind == "comment" {
+		err = a.comment(ctx, tx, p, r, expected)
 	} else {
 		return r, contracts.ErrInvalid
 	}

@@ -98,6 +98,15 @@ type Transaction interface {
 	Put(context.Context, Record, int64) (Record, error)
 }
 
+// FindingComments is optional for custom backends. It operates on authorized
+// canonical comments; deleted comments must disappear from graph reads too.
+type CommentReader interface {
+	FindingComments(context.Context, string, int, int) ([]Record, int64, error)
+}
+type CommentDeleter interface {
+	DeleteComment(context.Context, Record, int64) error
+}
+
 // View provides a consistent authorized snapshot. Update must serialize competing
 // organization writes and commit mutations, audit/change events and idempotency
 // responses atomically. Retry callbacks only if they have no external effects.

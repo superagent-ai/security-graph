@@ -206,7 +206,7 @@ func (t *transaction) Put(ctx context.Context, r storage.Record, expected int64)
 	if r.ID == "" || r.AssetID == "" {
 		return r, fmt.Errorf("id and asset_id required")
 	}
-	if t.native != nil && (r.Kind == "finding" || r.Kind == "report") {
+	if t.native != nil && (r.Kind == "finding" || r.Kind == "report" || r.Kind == "comment") {
 		saved, err := t.native.Put(ctx, t.tx, t.p, r, expected)
 		if err != nil {
 			return r, err
@@ -233,6 +233,11 @@ func (t *transaction) Put(ctx context.Context, r storage.Record, expected int64)
 	}
 	if err != nil {
 		return r, err
+	}
+	if r.Kind == "comment" && expected == 0 {
+		if err = t.commentEdge(ctx, r); err != nil {
+			return r, err
+		}
 	}
 	return r, t.audit(ctx, r)
 }
