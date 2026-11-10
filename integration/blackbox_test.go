@@ -34,6 +34,12 @@ func blackBoxWorkflow(t *testing.T, c client) {
 		if slices.Contains(schema.Properties["policy_verification"].Required, "docs_reviewed") {
 			t.Fatal("black-box findings must not require policy documents")
 		}
+		if _, ok := schema.Properties["code_references_unavailable_reason"]; !ok {
+			t.Fatal("missing source evidence explanation schema")
+		}
+		if _, ok := schema.Properties["policy_verification"].Properties["docs_unavailable_reason"]; !ok {
+			t.Fatal("missing policy evidence explanation schema")
+		}
 	}
 	if !found {
 		t.Fatal("submit_finding schema missing")
@@ -50,12 +56,14 @@ func blackBoxWorkflow(t *testing.T, c client) {
 			blackBox := finding("black-box-tenant-isolation")
 			blackBox.AffectedFiles, blackBox.CodeReferences = nil, nil
 			blackBox.ProposedPatch = nil
+			blackBox.CodeReferencesUnavailableReason = "Unavailable: this assessment had no source-code access."
 			blackBox.PolicyVerification.DocsReviewed = nil
+			blackBox.PolicyVerification.DocsUnavailableReason = "No policy documents were available."
 			blackBox.PolicyVerification.Conclusion = "No policy documents were available. Tenant A accessed tenant B's private fixture record; intended sharing could not be independently checked."
 			blackBox.Details = "GET /records/tenant-b-fixture returned another tenant's private record to tenant A. Source code was unavailable."
 			blackBox.GitHubAdvisory.Description = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, "Missing tenant predicate.", blackBox.Details)
 			blackBox.GitHubAdvisory.Description = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, "Tenant isolation is required.", blackBox.PolicyVerification.Conclusion)
-			blackBox.GitHubAdvisory.Description = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, "handler.go:10-12.", "Unavailable: this assessment had no source-code access.")
+			blackBox.GitHubAdvisory.Description = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, "handler.go:10-12.", blackBox.CodeReferencesUnavailableReason)
 			blackBox.GitHubAdvisory.Vulnerabilities = []contracts.Vulnerability{{Package: contracts.Package{Ecosystem: "Other", Name: "https://fixture.example.test"}, VulnerableVersionRange: "Deployed instance at assessment time; version unknown."}}
 			payload := func() map[string]any {
 				b, err := json.Marshal(blackBox)
@@ -89,7 +97,45 @@ func blackBoxWorkflow(t *testing.T, c client) {
 			if persisted.Triage.Status != contracts.New || persisted.Triage.VerificationStatus != nil || persisted.Submission.Proof != blackBox.Proof || len(persisted.Submission.CodeReferences) != 0 || len(persisted.Submission.AffectedFiles) != 0 || persisted.Submission.ProposedPatch != nil || len(persisted.Submission.PolicyVerification.DocsReviewed) != 0 {
 				t.Fatal("black-box evidence or claim attribution changed on persistence")
 			}
+			if persisted.Submission.CodeReferencesUnavailableReason != blackBox.CodeReferencesUnavailableReason || persisted.Submission.PolicyVerification.DocsUnavailableReason != blackBox.PolicyVerification.DocsUnavailableReason {
+				t.Fatal("unavailable evidence explanations were not persisted")
+			}
 			for name, mutate := range map[string]func(map[string]any){
+				"missing source explanation": func(f map[string]any) { delete(f, "code_references_unavailable_reason") },
+				"blank source explanation":   func(f map[string]any) { f["code_references_unavailable_reason"] = " \t" },
+				"empty references without explanation": func(f map[string]any) {
+					f["code_references"] = []contracts.CodeReference{}
+					delete(f, "code_references_unavailable_reason")
+				},
+				"null references without explanation": func(f map[string]any) {
+					f["code_references"] = nil
+					delete(f, "code_references_unavailable_reason")
+				},
+				"empty code references section": func(f map[string]any) {
+					f["github_advisory"].(map[string]any)["description"] = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, blackBox.CodeReferencesUnavailableReason, " \t")
+				},
+				"source explanation outside references section": func(f map[string]any) {
+					f["github_advisory"].(map[string]any)["description"] = strings.ReplaceAll(blackBox.GitHubAdvisory.Description, blackBox.CodeReferencesUnavailableReason, "") + "\n" + blackBox.CodeReferencesUnavailableReason
+				},
+				"policy assertion without availability explanation": func(f map[string]any) {
+					p := f["policy_verification"].(map[string]any)
+					p["conclusion"] = "This violates policy"
+					delete(p, "docs_unavailable_reason")
+				},
+				"blank policy explanation": func(f map[string]any) { f["policy_verification"].(map[string]any)["docs_unavailable_reason"] = " \t" },
+				"empty policy documents without explanation": func(f map[string]any) {
+					p := f["policy_verification"].(map[string]any)
+					p["docs_reviewed"] = []contracts.PolicyDocument{}
+					delete(p, "docs_unavailable_reason")
+				},
+				"null policy documents without explanation": func(f map[string]any) {
+					p := f["policy_verification"].(map[string]any)
+					p["docs_reviewed"] = nil
+					delete(p, "docs_unavailable_reason")
+				},
+				"policy explanation missing from conclusion": func(f map[string]any) {
+					f["policy_verification"].(map[string]any)["conclusion"] = "This violates policy"
+				},
 				"invalid source reference": func(f map[string]any) {
 					f["code_references"] = []contracts.CodeReference{{File: "handler.go", LineStart: 0, LineEnd: 1, Excerpt: "fixture", Reason: "fixture"}}
 				},
