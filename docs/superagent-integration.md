@@ -77,6 +77,24 @@ migration's final block; newly provisioned runtime roles need those same grants.
 No browser role receives access. Native capabilities stay entirely on the App
 server and never enter sandbox configuration or model context.
 
+## Finding review status and history
+
+Apply the App's `20261110075253_finding_disposition_graph_parity` migration before
+deploying the engine with native PR triage support. PR findings accept the same
+manual states (`new`, `in_review`, `resolved`) and resolutions (`fixed`,
+`accepted_risk`, `false_positive`, `wont_fix`) as other findings. The legacy
+`dismissed` flag remains synchronized; reopening clears cached PR suppression.
+PR execution results are retained rather than rerunning the assessment.
+
+Dashboard, REST, and MCP transitions append actor-attributed before/after events
+atomically with the authoritative row update. Native MCP writes use the
+authenticated API-key actor and do not duplicate the database event. Context
+records expose the ten most recent transitions in `data.status_history`; the
+change feed includes operation and structured event details. Historical review
+context remains available when a finding is reopened, with the current status
+and newer transitions taking precedence. The migration grants the native runtime
+only the additional PR columns and dismissal-cache access it needs.
+
 ## Automatic classification
 
 Set `AUTO_CLASSIFY_FINDINGS=1` with the existing verified local classifier on a
