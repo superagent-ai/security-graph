@@ -102,7 +102,7 @@ Ask your agent to register `acme/payments`, read its context, and record an asse
 create_asset → get_context → create_report → submit_finding → finish_report
 ```
 
-Every tool call requires an `intent` describing its purpose. The agent discovers the required inputs through MCP. Finding submissions currently require repository evidence, including code references, a PoC, and patch validation; see the [agent guide](AGENTS.md#using-security-graph).
+Every tool call requires an `intent` describing its purpose. The agent discovers the required inputs through MCP. Finding submissions support source-assisted and black-box assessments: a concrete PoC, reproduction steps, policy assessment, impact, and remediation are required. Source files, code references, policy documents, and a validated patch are optional when unavailable; see the [agent guide](AGENTS.md#using-security-graph).
 
 The MCP process exits when your agent disconnects. To stop PostgreSQL while keeping its data, run `docker compose down`.
 

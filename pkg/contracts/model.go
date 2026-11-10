@@ -59,7 +59,7 @@ type PolicyDocument struct {
 	Interpretation  string `json:"interpretation"`
 }
 type PolicyVerification struct {
-	DocsReviewed               []PolicyDocument `json:"docs_reviewed"`
+	DocsReviewed               []PolicyDocument `json:"docs_reviewed,omitempty" jsonschema:"Policy documents reviewed, when available. Omit when unavailable and explain the limitation in conclusion."`
 	InScope                    bool             `json:"in_scope"`
 	ContradictedByPolicy       bool             `json:"contradicted_by_policy"`
 	DocumentedIntendedBehavior bool             `json:"documented_intended_behavior"`
@@ -84,14 +84,15 @@ type Vulnerability struct {
 	VulnerableFunctions    []string `json:"vulnerable_functions,omitempty"`
 }
 
-// Submission is the existing repository save_finding authoring contract.
+// Submission uses the shared save_finding template for attributed findings.
+// Source evidence is optional for black-box assessments, but validated when supplied.
 // Transport metadata (intent, idempotency, actor) never lives in this model.
 type Submission struct {
 	ID                    string             `json:"id"`
 	Title                 string             `json:"title,omitempty"`
 	Severity              string             `json:"severity,omitempty"`
 	CWEIDs                []string           `json:"cwe_ids"`
-	AffectedFiles         []string           `json:"affected_files"`
+	AffectedFiles         []string           `json:"affected_files,omitempty" jsonschema:"Affected source files, when known. Omit for black-box assessments without source access."`
 	Summary               string             `json:"summary"`
 	Impact                string             `json:"impact"`
 	Details               string             `json:"details"`
@@ -100,9 +101,9 @@ type Submission struct {
 	ReproductionSteps     []string           `json:"reproduction_steps"`
 	PolicyVerification    PolicyVerification `json:"policy_verification"`
 	FalsePositiveAnalysis string             `json:"false_positive_analysis"`
-	CodeReferences        []CodeReference    `json:"code_references"`
+	CodeReferences        []CodeReference    `json:"code_references,omitempty" jsonschema:"Source evidence, when available. Omit without source access and explain this in the Code References description section."`
 	Remediation           string             `json:"remediation"`
-	ProposedPatch         ProposedPatch      `json:"proposed_patch"`
+	ProposedPatch         *ProposedPatch     `json:"proposed_patch,omitempty" jsonschema:"Optional source patch. If supplied, include the diff, files and validation evidence. Black-box findings still require remediation guidance."`
 	GitHubAdvisory        Advisory           `json:"github_advisory"`
 }
 
@@ -158,8 +159,11 @@ func (s *Submission) Validate() error {
 	if !oneOf(s.Severity, "critical", "high", "medium", "low") {
 		return fmt.Errorf("%w: invalid severity", ErrInvalid)
 	}
-	if !stringList(s.CWEIDs) || !stringList(s.GitHubAdvisory.CWEIDs) || !stringList(s.AffectedFiles) || !stringList(s.ExploitPreconditions) || !stringList(s.ReproductionSteps) {
-		return fmt.Errorf("%w: CWE, affected_files, exploit_preconditions, and reproduction_steps must be nonempty", ErrInvalid)
+	if !stringList(s.CWEIDs) || !stringList(s.GitHubAdvisory.CWEIDs) || !stringList(s.ExploitPreconditions) || !stringList(s.ReproductionSteps) {
+		return fmt.Errorf("%w: CWE, exploit_preconditions, and reproduction_steps must be nonempty", ErrInvalid)
+	}
+	if len(s.AffectedFiles) > 0 && !stringList(s.AffectedFiles) {
+		return fmt.Errorf("%w: affected_files must contain nonblank paths", ErrInvalid)
 	}
 	for _, list := range [][]string{s.CWEIDs, s.GitHubAdvisory.CWEIDs} {
 		for _, cwe := range list {
@@ -186,29 +190,27 @@ func (s *Submission) Validate() error {
 		}
 	}
 	p := s.PolicyVerification
-	if len(p.DocsReviewed) == 0 || !nonempty(p.Conclusion) {
-		return fmt.Errorf("%w: policy review documents and conclusion are required", ErrInvalid)
+	if !nonempty(p.Conclusion) {
+		return fmt.Errorf("%w: policy review conclusion is required; explain any unavailable policy evidence", ErrInvalid)
 	}
 	for _, d := range p.DocsReviewed {
 		if !nonempty(d.File) || !nonempty(d.RelevantExcerpt) || !nonempty(d.Interpretation) {
 			return fmt.Errorf("%w: incomplete policy document", ErrInvalid)
 		}
 	}
-	if len(s.CodeReferences) == 0 {
-		return fmt.Errorf("%w: code_references are required", ErrInvalid)
-	}
 	for _, r := range s.CodeReferences {
 		if !nonempty(r.File) || r.LineStart < 1 || r.LineEnd < r.LineStart || !nonempty(r.Excerpt) || !nonempty(r.Reason) {
 			return fmt.Errorf("%w: invalid code reference", ErrInvalid)
 		}
 	}
-	patch := s.ProposedPatch
-	if !nonempty(patch.Summary) || !nonempty(patch.Diff) || !stringList(patch.Files) || len(patch.Validation.Tests) == 0 {
-		return fmt.Errorf("%w: patch and validation evidence are required", ErrInvalid)
-	}
-	for _, v := range patch.Validation.Tests {
-		if !nonempty(v.Command) || !nonempty(v.Result) {
-			return fmt.Errorf("%w: incomplete patch validation", ErrInvalid)
+	if patch := s.ProposedPatch; patch != nil {
+		if !nonempty(patch.Summary) || !nonempty(patch.Diff) || !stringList(patch.Files) || len(patch.Validation.Tests) == 0 {
+			return fmt.Errorf("%w: patch and validation evidence are required", ErrInvalid)
+		}
+		for _, v := range patch.Validation.Tests {
+			if !nonempty(v.Command) || !nonempty(v.Result) {
+				return fmt.Errorf("%w: incomplete patch validation", ErrInvalid)
+			}
 		}
 	}
 	b, _ := json.Marshal(s)

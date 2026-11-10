@@ -73,13 +73,13 @@ Standalone HTTP authentication uses deployment-issued bearer keys. Native mode u
 
 ### Agent workflow
 
-Finding submissions currently use the repository assessment profile. Include the six sections `Impact`, `Details`, `Policy Verification`, `Code References`, `PoC`, and `Remediation`, with the structured evidence required by the tools. See [source compatibility](docs/source-compatibility.md) for the current authoring scope.
+Finding submissions support source-assisted and black-box assessments. Include the six sections `Impact`, `Details`, `Policy Verification`, `Code References`, `PoC`, and `Remediation`, with the structured evidence required by the tools. When source code is unavailable, omit `affected_files`, `code_references`, and `proposed_patch`; explain the limitation under `Code References` and still provide remediation guidance. `policy_verification.docs_reviewed` is optional when no policy documents are available; explain what could and could not be checked in the required conclusion. Never fabricate evidence. Supplied source, policy, and patch evidence must remain complete and valid. See [source compatibility](docs/source-compatibility.md).
 
 1. Discover tool schemas and read the server instructions.
 2. Register an authorized asset with `create_asset`, using `asset_id: "acme/payments"`.
 3. Retrieve existing context using `get_context` or the finding/report tools.
 4. Start an external assessment with `create_report`. This records a run; it does not launch a Superagent scan.
-5. Submit a structured finding with `submit_finding`. Include the existing policy review, code references, concrete PoC, and proposed patch validation evidence. New submissions are attributed claims with triage status `new`, not independently confirmed vulnerabilities.
+5. Submit a structured finding with `submit_finding`. Include the policy assessment, concrete PoC, reproduction steps, impact, and remediation. Include code references, affected files, reviewed policy documents, and proposed patch validation evidence when available. New submissions are attributed claims with triage status `new`, not independently confirmed vulnerabilities.
 6. Read `get_classification_options` and call `set_finding_classification` with agent-selected `type_ids`, `compliance_ids`, rationale, and current versions. Native App tools save the same object atomically. Empty arrays explicitly mean no applicable choice. Hosted deployments do not run Julia inference.
 7. Record execution completion using `finish_report`. The engine handles empty/all-resolved reports and unresolved review state.
 8. Use `update_finding_triage` or `update_report_review_status` only with disposition permission and a current `expected_version`.

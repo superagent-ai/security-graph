@@ -238,7 +238,7 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 	})
 	add(s, "create_asset", "Register an asset under authorized asset access. Requires graph:write permission.", false, func(ctx context.Context, in engine.CreateAssetInput) (any, error) { return e.CreateAsset(ctx, p, in) })
 	add(s, "create_report", "Start an external assessment report for a registered asset. Does not launch a Superagent scan.", false, func(ctx context.Context, in engine.CreateReportInput) (any, error) { return e.CreateReport(ctx, p, in) })
-	add(s, "submit_finding", "Persist a finding using the existing structured repository report template, code references, policy verification, PoC and validated patch evidence. Retained as an attributed claim with triage status new.", false, func(ctx context.Context, in engine.SubmitFindingInput) (any, error) {
+	add(s, "submit_finding", "Persist a finding using the shared six-section template, policy assessment, concrete PoC and remediation. Source files, code references, policy documents and a validated patch are optional; omit unavailable evidence for black-box assessments and explain limitations in the relevant sections. Supplied evidence is validated. Retained as an attributed claim with triage status new.", false, func(ctx context.Context, in engine.SubmitFindingInput) (any, error) {
 		return e.SubmitFinding(ctx, p, in)
 	})
 	add(s, "update_finding_triage", "Update a finding to new, in_review or resolved. Resolving requires fixed, accepted_risk, false_positive or wont_fix. Requires disposition permission and current version.", false, func(ctx context.Context, in engine.UpdateFindingInput) (any, error) {
