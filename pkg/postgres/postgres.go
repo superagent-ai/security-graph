@@ -126,6 +126,13 @@ func (s *Store) Update(ctx context.Context, p storage.Principal, c storage.Call,
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
+	if s.Native != nil {
+		h := sha256.Sum256([]byte(c.Intent))
+		_, err = tx.Exec(ctx, "SELECT set_config('security_graph.actor_id',$1,true),set_config('security_graph.channel','mcp',true),set_config('security_graph.intent_hash',$2,true)", p.ActorID, hex.EncodeToString(h[:]))
+		if err != nil {
+			return nil, err
+		}
+	}
 	result, err := f(&transaction{tx: tx, p: p, call: c, native: s.Native})
 	if err != nil {
 		return nil, err
@@ -243,6 +250,16 @@ func (t *transaction) Put(ctx context.Context, r storage.Record, expected int64)
 }
 
 func (t *transaction) audit(ctx context.Context, r storage.Record) error {
+	if t.native != nil && r.Kind == "finding" && t.call.Operation == "update_finding_triage" {
+		var recorded bool
+		err := t.tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM security_graph.changes WHERE organization_id=$1 AND entity_id=$2 AND version=$3 AND operation=$4)", t.p.OrganizationID, r.ID, r.Version, t.call.Operation).Scan(&recorded)
+		if err != nil {
+			return err
+		}
+		if recorded {
+			return nil
+		} // The authoritative row trigger recorded before/after atomically.
+	}
 	h := sha256.Sum256([]byte(t.call.Intent))
 	_, err := t.tx.Exec(ctx, "INSERT INTO security_graph.changes(organization_id,asset_id,entity_id,kind,version,actor_id,operation,intent_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", t.p.OrganizationID, r.AssetID, r.ID, r.Kind, r.Version, t.p.ActorID, t.call.Operation, hex.EncodeToString(h[:]))
 	return err
@@ -255,7 +272,7 @@ func (t *transaction) Changes(ctx context.Context, after int64, limit int) ([]st
 	if t.native != nil {
 		source = "(SELECT organization_id,id,asset_id,kind,data FROM security_graph.app_records UNION ALL SELECT organization_id,id,asset_id,kind,data FROM security_graph.entities e WHERE NOT EXISTS(SELECT 1 FROM security_graph.app_records n WHERE n.organization_id=e.organization_id AND n.id=e.id))"
 	}
-	rows, err := t.tx.Query(ctx, "SELECT c.cursor,c.entity_id,c.kind,c.version,c.actor_id,c.created_at FROM security_graph.changes c JOIN "+source+" entities ON entities.organization_id=c.organization_id AND entities.id=c.entity_id WHERE c.organization_id=$1 AND ($2 OR c.asset_id=ANY($3::text[])) AND c.cursor>$4"+t.visibility("$2", "$3")+" ORDER BY c.cursor LIMIT $5", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, after, limit)
+	rows, err := t.tx.Query(ctx, "SELECT c.cursor,c.entity_id,c.kind,c.version,c.actor_id,c.created_at,c.operation,c.details FROM security_graph.changes c JOIN "+source+" entities ON entities.organization_id=c.organization_id AND entities.id=c.entity_id WHERE c.organization_id=$1 AND ($2 OR c.asset_id=ANY($3::text[])) AND c.cursor>$4"+t.visibility("$2", "$3")+" ORDER BY c.cursor LIMIT $5", t.p.OrganizationID, t.p.AllAssets, t.p.AssetIDs, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +280,7 @@ func (t *transaction) Changes(ctx context.Context, after int64, limit int) ([]st
 	out := []storage.Change{}
 	for rows.Next() {
 		var c storage.Change
-		if err = rows.Scan(&c.Cursor, &c.EntityID, &c.Kind, &c.Version, &c.ActorID, &c.CreatedAt); err != nil {
+		if err = rows.Scan(&c.Cursor, &c.EntityID, &c.Kind, &c.Version, &c.ActorID, &c.CreatedAt, &c.Operation, &c.Details); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

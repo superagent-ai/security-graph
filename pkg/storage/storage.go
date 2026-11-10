@@ -74,12 +74,14 @@ type Query struct {
 	Offset       int
 }
 type Change struct {
-	Cursor    int64     `json:"cursor"`
-	EntityID  string    `json:"entity_id"`
-	Kind      string    `json:"kind"`
-	Version   int64     `json:"version"`
-	ActorID   string    `json:"actor_id"`
-	CreatedAt time.Time `json:"created_at"`
+	Cursor    int64           `json:"cursor"`
+	EntityID  string          `json:"entity_id"`
+	Kind      string          `json:"kind"`
+	Version   int64           `json:"version"`
+	ActorID   string          `json:"actor_id"`
+	CreatedAt time.Time       `json:"created_at"`
+	Operation string          `json:"operation,omitempty"`
+	Details   json.RawMessage `json:"details,omitempty"`
 }
 type Call struct {
 	Intent    string
