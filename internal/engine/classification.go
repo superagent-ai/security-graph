@@ -25,25 +25,76 @@ var immutableCatalog = sync.OnceValue(func() catalog.Catalog {
 })
 
 func currentCatalog() catalog.Catalog { return immutableCatalog() }
-func (e *Engine) Catalog(p storage.Principal, intent string) (catalog.Catalog, error) {
-	if err := authorize(p, intent, "read"); err != nil {
-		return catalog.Catalog{}, err
-	}
-	return catalog.Load()
+
+type CatalogInput struct {
+	Call
+	CatalogVersion string `json:"catalog_version,omitempty" jsonschema:"Read an immutable release, or current. Omission preserves the complete legacy v1 export."`
 }
 
-func (e *Engine) ClassificationOptions(p storage.Principal, intent string) (any, error) {
-	if err := authorize(p, intent, "read"); err != nil {
+func (e *Engine) Catalog(p storage.Principal, in CatalogInput) (catalog.Catalog, error) {
+	if err := authorize(p, in.Intent, "read"); err != nil {
+		return catalog.Catalog{}, err
+	}
+	if in.CatalogVersion == "current" {
+		return currentCatalog(), nil
+	}
+	if in.CatalogVersion == "" {
+		in.CatalogVersion = "1"
+	}
+	c, err := catalog.LoadVersion(in.CatalogVersion)
+	if err != nil {
+		return c, fmt.Errorf("%w: unknown catalog version", contracts.ErrInvalid)
+	}
+	return c, nil
+}
+
+type ClassificationOptionsInput struct {
+	Call
+	catalog.OptionsQuery
+}
+
+func (e *Engine) ClassificationOptions(p storage.Principal, in ClassificationOptionsInput) (any, error) {
+	if err := authorize(p, in.Intent, "read"); err != nil {
 		return nil, err
 	}
-	c := currentCatalog()
-	types := []catalog.Type{}
-	for _, t := range c.Types {
-		if t.Classifiable && !t.Deprecated {
-			types = append(types, t)
+	// Intent-only calls are the original v1 complete-list contract. This keeps
+	// already-provisioned agents and their unversioned saves consistent.
+	legacy := in.Query == "" && in.FrameworkID == "" && in.Cursor == "" && in.Limit == 0 && in.CatalogVersion == ""
+	c, err := catalog.OptionsCatalog(in.OptionsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("%w: unknown catalog version or invalid cursor", contracts.ErrInvalid)
+	}
+	version := in.CatalogVersion
+	if legacy {
+		version = "1"
+	}
+	if version != "" {
+		var err error
+		c, err = catalog.LoadVersion(version)
+		if err != nil {
+			return nil, fmt.Errorf("%w: unknown catalog version", contracts.ErrInvalid)
 		}
 	}
-	return map[string]any{"catalog_version": c.Version, "vulnerability_types": types, "compliance": c.Entries, "frameworks": c.Frameworks, "mappings": c.Mappings}, nil
+	if legacy {
+		types := []catalog.Type{}
+		entries := []catalog.Entry{}
+		for _, t := range c.Types {
+			if t.Classifiable && !t.Deprecated {
+				types = append(types, t)
+			}
+		}
+		for _, v := range c.Entries {
+			if !v.Deprecated {
+				entries = append(entries, v)
+			}
+		}
+		return catalog.Options{CatalogVersion: c.Version, Types: types, Compliance: entries, Frameworks: c.Frameworks, Mappings: c.Mappings, TypeTotal: len(types), ComplianceTotal: len(entries)}, nil
+	}
+	out, err := c.Options(in.OptionsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", contracts.ErrInvalid, err)
+	}
+	return out, nil
 }
 
 type ClassificationVersionInput struct {
@@ -53,9 +104,10 @@ type ClassificationVersionInput struct {
 	ExpectedClassificationVersion int64  `json:"expected_classification_version" jsonschema:"0 for first classification; otherwise the current classification record version."`
 }
 type ClassificationSelection struct {
-	TypeIDs       []string `json:"type_ids" jsonschema:"Select zero or more vulnerability type IDs from get_classification_options. Never invent IDs."`
-	ComplianceIDs []string `json:"compliance_ids" jsonschema:"Select zero or more compliance/framework entry IDs from get_classification_options. Empty means no applicable mapping; mappings are not proof of compliance."`
-	Rationale     string   `json:"rationale" jsonschema:"Explain how the evidence supports these selections, or why no catalog choice applies."`
+	CatalogVersion string   `json:"catalog_version,omitempty" jsonschema:"Copy catalog_version from get_classification_options. Omission is reserved for legacy catalog v1 selections, never the current release."`
+	TypeIDs        []string `json:"type_ids" jsonschema:"Select zero or more vulnerability type IDs from get_classification_options. Never invent IDs."`
+	ComplianceIDs  []string `json:"compliance_ids" jsonschema:"Select zero or more compliance/framework entry IDs from get_classification_options. Empty means no applicable mapping; mappings are not proof of compliance."`
+	Rationale      string   `json:"rationale" jsonschema:"Explain how the evidence supports these selections, or why no catalog choice applies."`
 }
 type SetClassificationInput struct {
 	ClassificationVersionInput
@@ -94,7 +146,22 @@ func validateTypes(c catalog.Catalog, ids []string) error {
 	}
 	return nil
 }
-func validateSelection(c catalog.Catalog, selection ClassificationSelection) error {
+func selectionCatalog(selection ClassificationSelection) (catalog.Catalog, error) {
+	version := selection.CatalogVersion
+	if version == "" {
+		version = "1"
+	}
+	c, err := catalog.LoadVersion(version)
+	if err != nil {
+		return c, fmt.Errorf("%w: unknown selection catalog_version", contracts.ErrInvalid)
+	}
+	return c, nil
+}
+func validateSelection(selection ClassificationSelection) error {
+	c, err := selectionCatalog(selection)
+	if err != nil {
+		return err
+	}
 	if selection.TypeIDs == nil || selection.ComplianceIDs == nil || strings.TrimSpace(selection.Rationale) == "" || len(selection.Rationale) > 2000 {
 		return fmt.Errorf("%w: select both lists and supply rationale (1–2000 bytes)", contracts.ErrInvalid)
 	}
@@ -103,7 +170,7 @@ func validateSelection(c catalog.Catalog, selection ClassificationSelection) err
 	}
 	allowed := map[string]bool{}
 	for _, entry := range c.Entries {
-		allowed[entry.ID] = true
+		allowed[entry.ID] = !entry.Deprecated
 	}
 	seen := map[string]bool{}
 	for _, id := range selection.ComplianceIDs {
@@ -118,7 +185,7 @@ func (e *Engine) SetFindingClassification(ctx context.Context, p storage.Princip
 	if err := authorize(p, in.Intent, "read"); err != nil {
 		return nil, err
 	}
-	if err := validateSelection(currentCatalog(), in.ClassificationSelection); err != nil {
+	if err := validateSelection(in.ClassificationSelection); err != nil {
 		return nil, err
 	}
 	return e.write(ctx, p, "set_finding_classification", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
@@ -136,11 +203,15 @@ func (e *Engine) SetFindingClassification(ctx context.Context, p storage.Princip
 	})
 }
 func saveAgentClassification(ctx context.Context, tx storage.Transaction, p storage.Principal, f storage.Record, expected int64, selection ClassificationSelection) (storage.Record, error) {
+	c, err := selectionCatalog(selection)
+	if err != nil {
+		return storage.Record{}, err
+	}
 	ids := append([]string{}, selection.TypeIDs...)
 	sort.Strings(ids)
 	entries := append([]string{}, selection.ComplianceIDs...)
 	sort.Strings(entries)
-	return saveClassification(ctx, tx, p, f, expected, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: currentCatalog().Version, TypeIDs: ids, ComplianceIDs: entries, Method: "agent_asserted", SelectionPolicy: "agent_selected_v1", Rationale: selection.Rationale})
+	return saveClassification(ctx, tx, p, f, expected, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: c.Version, TypeIDs: ids, ComplianceIDs: entries, Method: "agent_asserted", SelectionPolicy: "agent_selected_v1", Rationale: selection.Rationale})
 }
 
 func saveClassification(ctx context.Context, tx storage.Transaction, p storage.Principal, f storage.Record, expected int64, c Classification) (storage.Record, error) {
@@ -166,7 +237,7 @@ func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record
 	if r, err := tx.Get(ctx, id); err != storage.ErrNotFound {
 		return r, err
 	}
-	if r, ok := currentCatalog().Get(id); ok {
+	if r, ok := catalog.Get(id); ok {
 		if r.Kind == "relationship" {
 			var rel contracts.Relationship
 			_ = json.Unmarshal(r.Data, &rel)
@@ -240,7 +311,6 @@ func classificationEdge(r storage.Record, cl Classification, id string) storage.
 // graphEdges projects current classification assignments into instance_of edges.
 // All finding lookups and classification queries use the authenticated snapshot.
 func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit func(storage.Record) error) error {
-	c := currentCatalog()
 	collisions := map[string]bool{}
 	virtualAvailable := func(ids ...string) (bool, error) {
 		for _, id := range ids {
@@ -263,7 +333,7 @@ func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit fun
 	for _, id := range front {
 		connected[id] = true
 	}
-	for _, r := range c.Records() {
+	for _, r := range catalog.Adjacent(front...) {
 		if r.Kind != "relationship" {
 			continue
 		}

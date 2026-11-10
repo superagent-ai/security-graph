@@ -12,6 +12,7 @@ FROM scratch
 LABEL org.opencontainers.image.source="https://github.com/superagent-ai/security-graph"
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /security-graph /security-graph
+COPY pkg/catalog/NOTICE.md pkg/catalog/CWE-LICENSE.txt pkg/catalog/ATLAS-LICENSE.txt /licenses/catalog/
 COPY deploy/gcp/supabase-ca.crt /etc/security-graph/supabase-ca.crt
 USER 65532:65532
 ENV LISTEN_ADDR=:8080
