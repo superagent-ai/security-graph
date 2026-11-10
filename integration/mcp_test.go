@@ -24,19 +24,20 @@ import (
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
+type inputSchema struct {
+	Type       json.RawMessage        `json:"type"`
+	Required   []string               `json:"required"`
+	Properties map[string]inputSchema `json:"properties"`
+}
+
 type rpcResult struct {
 	Result struct {
 		IsError    bool            `json:"isError"`
 		Content    json.RawMessage `json:"content"`
 		Structured json.RawMessage `json:"structuredContent"`
 		Tools      []struct {
-			Name        string `json:"name"`
-			InputSchema struct {
-				Required   []string `json:"required"`
-				Properties map[string]struct {
-					Type json.RawMessage `json:"type"`
-				} `json:"properties"`
-			} `json:"inputSchema"`
+			Name        string      `json:"name"`
+			InputSchema inputSchema `json:"inputSchema"`
 		} `json:"tools"`
 	} `json:"result"`
 	Error json.RawMessage `json:"error"`
@@ -140,7 +141,7 @@ func writeArgs() map[string]any {
 	return map[string]any{"intent": "Investigate the integration fixture authorization vulnerability.", "idempotency_key": uuid.NewString()}
 }
 func finding(id string) contracts.Submission {
-	return contracts.Submission{ID: id, Title: "Missing tenant check", Severity: "high", CWEIDs: []string{"CWE-862"}, AffectedFiles: []string{"handler.go"}, Summary: "A tenant can read another tenant's records.", Impact: "Cross-tenant record disclosure.", Details: "The handler does not compare tenant identifiers.", Proof: "A request from tenant A returned tenant B's fixture record.", ExploitPreconditions: []string{"Authenticated tenant account."}, ReproductionSteps: []string{"Request tenant B fixture record as A; observed HTTP 200 and B's record."}, PolicyVerification: contracts.PolicyVerification{DocsReviewed: []contracts.PolicyDocument{{File: "POLICY.md", RelevantExcerpt: "Tenants must be isolated.", Interpretation: "Cross-tenant access is forbidden."}}, InScope: true, Conclusion: "This violates tenant isolation."}, FalsePositiveAnalysis: "No documented cross-tenant sharing exists.", CodeReferences: []contracts.CodeReference{{File: "handler.go", LineStart: 10, LineEnd: 12, Excerpt: "store.Get(id)", Reason: "No tenant predicate."}}, Remediation: "Apply a tenant predicate.", ProposedPatch: contracts.ProposedPatch{Summary: "Check tenant membership.", Diff: "--- a/handler.go\n+++ b/handler.go\n@@ -1 +1 @@\n-store.Get(id)\n+store.GetForTenant(id, tenant)\n", Files: []string{"handler.go"}, Validation: contracts.PatchValidation{Tests: []contracts.ValidationCommand{{Command: "integration tenant-isolation scenario", Result: "Cross-tenant request returns 404."}}}}, GitHubAdvisory: contracts.Advisory{Summary: "Missing tenant check", Severity: "high", CWEIDs: []string{"CWE-862"}, Vulnerabilities: []contracts.Vulnerability{{Package: contracts.Package{Ecosystem: "Go", Name: "example.com/app"}, VulnerableVersionRange: "1.0.0"}}, Description: "## Impact\nCross-tenant disclosure.\n\n## Details\nMissing tenant predicate.\n\n## Policy Verification\nTenant isolation is required.\n\n## Code References\nhandler.go:10-12.\n\n## PoC\nRequest as A returned B's record with HTTP 200.\n\n## Remediation\nUse a tenant predicate."}}
+	return contracts.Submission{ID: id, Title: "Missing tenant check", Severity: "high", CWEIDs: []string{"CWE-862"}, AffectedFiles: []string{"handler.go"}, Summary: "A tenant can read another tenant's records.", Impact: "Cross-tenant record disclosure.", Details: "The handler does not compare tenant identifiers.", Proof: "A request from tenant A returned tenant B's fixture record.", ExploitPreconditions: []string{"Authenticated tenant account."}, ReproductionSteps: []string{"Request tenant B fixture record as A; observed HTTP 200 and B's record."}, PolicyVerification: contracts.PolicyVerification{DocsReviewed: []contracts.PolicyDocument{{File: "POLICY.md", RelevantExcerpt: "Tenants must be isolated.", Interpretation: "Cross-tenant access is forbidden."}}, InScope: true, Conclusion: "This violates tenant isolation."}, FalsePositiveAnalysis: "No documented cross-tenant sharing exists.", CodeReferences: []contracts.CodeReference{{File: "handler.go", LineStart: 10, LineEnd: 12, Excerpt: "store.Get(id)", Reason: "No tenant predicate."}}, Remediation: "Apply a tenant predicate.", ProposedPatch: &contracts.ProposedPatch{Summary: "Check tenant membership.", Diff: "--- a/handler.go\n+++ b/handler.go\n@@ -1 +1 @@\n-store.Get(id)\n+store.GetForTenant(id, tenant)\n", Files: []string{"handler.go"}, Validation: contracts.PatchValidation{Tests: []contracts.ValidationCommand{{Command: "integration tenant-isolation scenario", Result: "Cross-tenant request returns 404."}}}}, GitHubAdvisory: contracts.Advisory{Summary: "Missing tenant check", Severity: "high", CWEIDs: []string{"CWE-862"}, Vulnerabilities: []contracts.Vulnerability{{Package: contracts.Package{Ecosystem: "Go", Name: "example.com/app"}, VulnerableVersionRange: "1.0.0"}}, Description: "## Impact\nCross-tenant disclosure.\n\n## Details\nMissing tenant predicate.\n\n## Policy Verification\nTenant isolation is required.\n\n## Code References\nhandler.go:10-12.\n\n## PoC\nRequest as A returned B's record with HTTP 200.\n\n## Remediation\nUse a tenant predicate."}}
 }
 
 func TestMCPPostgresWorkflow(t *testing.T) {
@@ -411,6 +412,9 @@ func TestMCPPostgresWorkflow(t *testing.T) {
 		if _, err = lc.rpc("tools/list", map[string]any{}); err == nil {
 			t.Fatal("revoked credential remained usable")
 		}
+	})
+	t.Run("black-box assessment workflow", func(t *testing.T) {
+		blackBoxWorkflow(t, c)
 	})
 	t.Run("audit is attributable and does not retain raw intent", func(t *testing.T) {
 		var actor, hash string

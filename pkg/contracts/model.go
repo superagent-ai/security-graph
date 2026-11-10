@@ -59,7 +59,8 @@ type PolicyDocument struct {
 	Interpretation  string `json:"interpretation"`
 }
 type PolicyVerification struct {
-	DocsReviewed               []PolicyDocument `json:"docs_reviewed"`
+	DocsReviewed               []PolicyDocument `json:"docs_reviewed,omitempty" jsonschema:"Policy documents reviewed, when available. If omitted or empty, supply docs_unavailable_reason and include that explanation in conclusion."`
+	DocsUnavailableReason      string           `json:"docs_unavailable_reason,omitempty" jsonschema:"Required when docs_reviewed is omitted or empty. Explain why policy documents were unavailable. Include this exact explanation in conclusion."`
 	InScope                    bool             `json:"in_scope"`
 	ContradictedByPolicy       bool             `json:"contradicted_by_policy"`
 	DocumentedIntendedBehavior bool             `json:"documented_intended_behavior"`
@@ -84,26 +85,28 @@ type Vulnerability struct {
 	VulnerableFunctions    []string `json:"vulnerable_functions,omitempty"`
 }
 
-// Submission is the existing repository save_finding authoring contract.
+// Submission uses the shared save_finding template for attributed findings.
+// Source evidence is optional for black-box assessments, but validated when supplied.
 // Transport metadata (intent, idempotency, actor) never lives in this model.
 type Submission struct {
-	ID                    string             `json:"id"`
-	Title                 string             `json:"title,omitempty"`
-	Severity              string             `json:"severity,omitempty"`
-	CWEIDs                []string           `json:"cwe_ids"`
-	AffectedFiles         []string           `json:"affected_files"`
-	Summary               string             `json:"summary"`
-	Impact                string             `json:"impact"`
-	Details               string             `json:"details"`
-	Proof                 string             `json:"proof"`
-	ExploitPreconditions  []string           `json:"exploit_preconditions"`
-	ReproductionSteps     []string           `json:"reproduction_steps"`
-	PolicyVerification    PolicyVerification `json:"policy_verification"`
-	FalsePositiveAnalysis string             `json:"false_positive_analysis"`
-	CodeReferences        []CodeReference    `json:"code_references"`
-	Remediation           string             `json:"remediation"`
-	ProposedPatch         ProposedPatch      `json:"proposed_patch"`
-	GitHubAdvisory        Advisory           `json:"github_advisory"`
+	ID                              string             `json:"id"`
+	Title                           string             `json:"title,omitempty"`
+	Severity                        string             `json:"severity,omitempty"`
+	CWEIDs                          []string           `json:"cwe_ids"`
+	AffectedFiles                   []string           `json:"affected_files,omitempty" jsonschema:"Affected source files, when known. Omit for black-box assessments without source access."`
+	Summary                         string             `json:"summary"`
+	Impact                          string             `json:"impact"`
+	Details                         string             `json:"details"`
+	Proof                           string             `json:"proof"`
+	ExploitPreconditions            []string           `json:"exploit_preconditions"`
+	ReproductionSteps               []string           `json:"reproduction_steps"`
+	PolicyVerification              PolicyVerification `json:"policy_verification"`
+	FalsePositiveAnalysis           string             `json:"false_positive_analysis"`
+	CodeReferences                  []CodeReference    `json:"code_references,omitempty" jsonschema:"Source evidence, when available. If omitted or empty, supply code_references_unavailable_reason and include that explanation in the Code References description section."`
+	CodeReferencesUnavailableReason string             `json:"code_references_unavailable_reason,omitempty" jsonschema:"Required when code_references is omitted or empty. Explain why source evidence was unavailable. Include this exact explanation in the Code References description section."`
+	Remediation                     string             `json:"remediation"`
+	ProposedPatch                   *ProposedPatch     `json:"proposed_patch,omitempty" jsonschema:"Optional source patch. If supplied, include the diff, files and validation evidence. Black-box findings still require remediation guidance."`
+	GitHubAdvisory                  Advisory           `json:"github_advisory"`
 }
 
 func ValidateIntent(intent string) error {
@@ -158,8 +161,11 @@ func (s *Submission) Validate() error {
 	if !oneOf(s.Severity, "critical", "high", "medium", "low") {
 		return fmt.Errorf("%w: invalid severity", ErrInvalid)
 	}
-	if !stringList(s.CWEIDs) || !stringList(s.GitHubAdvisory.CWEIDs) || !stringList(s.AffectedFiles) || !stringList(s.ExploitPreconditions) || !stringList(s.ReproductionSteps) {
-		return fmt.Errorf("%w: CWE, affected_files, exploit_preconditions, and reproduction_steps must be nonempty", ErrInvalid)
+	if !stringList(s.CWEIDs) || !stringList(s.GitHubAdvisory.CWEIDs) || !stringList(s.ExploitPreconditions) || !stringList(s.ReproductionSteps) {
+		return fmt.Errorf("%w: CWE, exploit_preconditions, and reproduction_steps must be nonempty", ErrInvalid)
+	}
+	if len(s.AffectedFiles) > 0 && !stringList(s.AffectedFiles) {
+		return fmt.Errorf("%w: affected_files must contain nonblank paths", ErrInvalid)
 	}
 	for _, list := range [][]string{s.CWEIDs, s.GitHubAdvisory.CWEIDs} {
 		for _, cwe := range list {
@@ -176,18 +182,35 @@ func (s *Submission) Validate() error {
 	if len(s.GitHubAdvisory.Vulnerabilities) == 0 {
 		return fmt.Errorf("%w: affected products are required", ErrInvalid)
 	}
-	headings := map[string]bool{}
+	sections := map[string][]string{}
+	section := ""
 	for _, line := range strings.Split(s.GitHubAdvisory.Description, "\n") {
-		headings[strings.ToLower(strings.TrimSpace(line))] = true
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			section = strings.ToLower(trimmed)
+			if _, ok := sections[section]; !ok {
+				sections[section] = nil
+			}
+		} else if section != "" {
+			sections[section] = append(sections[section], line)
+		}
 	}
 	for _, h := range []string{"Impact", "Details", "Policy Verification", "Code References", "PoC", "Remediation"} {
-		if !headings["## "+strings.ToLower(h)] {
+		if _, ok := sections["## "+strings.ToLower(h)]; !ok {
 			return fmt.Errorf("%w: description requires ## %s", ErrInvalid, h)
 		}
 	}
 	p := s.PolicyVerification
-	if len(p.DocsReviewed) == 0 || !nonempty(p.Conclusion) {
-		return fmt.Errorf("%w: policy review documents and conclusion are required", ErrInvalid)
+	if !nonempty(p.Conclusion) {
+		return fmt.Errorf("%w: policy review conclusion is required; explain any unavailable policy evidence", ErrInvalid)
+	}
+	if len(p.DocsReviewed) == 0 {
+		if !nonempty(p.DocsUnavailableReason) {
+			return fmt.Errorf("%w: policy_verification.docs_unavailable_reason is required when docs_reviewed is omitted or empty", ErrInvalid)
+		}
+		if !strings.Contains(p.Conclusion, p.DocsUnavailableReason) {
+			return fmt.Errorf("%w: policy_verification.conclusion must include docs_unavailable_reason", ErrInvalid)
+		}
 	}
 	for _, d := range p.DocsReviewed {
 		if !nonempty(d.File) || !nonempty(d.RelevantExcerpt) || !nonempty(d.Interpretation) {
@@ -195,20 +218,26 @@ func (s *Submission) Validate() error {
 		}
 	}
 	if len(s.CodeReferences) == 0 {
-		return fmt.Errorf("%w: code_references are required", ErrInvalid)
+		if !nonempty(s.CodeReferencesUnavailableReason) {
+			return fmt.Errorf("%w: code_references_unavailable_reason is required when code_references is omitted or empty", ErrInvalid)
+		}
+		if !strings.Contains(strings.Join(sections["## code references"], "\n"), s.CodeReferencesUnavailableReason) {
+			return fmt.Errorf("%w: Code References section must include code_references_unavailable_reason", ErrInvalid)
+		}
 	}
 	for _, r := range s.CodeReferences {
 		if !nonempty(r.File) || r.LineStart < 1 || r.LineEnd < r.LineStart || !nonempty(r.Excerpt) || !nonempty(r.Reason) {
 			return fmt.Errorf("%w: invalid code reference", ErrInvalid)
 		}
 	}
-	patch := s.ProposedPatch
-	if !nonempty(patch.Summary) || !nonempty(patch.Diff) || !stringList(patch.Files) || len(patch.Validation.Tests) == 0 {
-		return fmt.Errorf("%w: patch and validation evidence are required", ErrInvalid)
-	}
-	for _, v := range patch.Validation.Tests {
-		if !nonempty(v.Command) || !nonempty(v.Result) {
-			return fmt.Errorf("%w: incomplete patch validation", ErrInvalid)
+	if patch := s.ProposedPatch; patch != nil {
+		if !nonempty(patch.Summary) || !nonempty(patch.Diff) || !stringList(patch.Files) || len(patch.Validation.Tests) == 0 {
+			return fmt.Errorf("%w: patch and validation evidence are required", ErrInvalid)
+		}
+		for _, v := range patch.Validation.Tests {
+			if !nonempty(v.Command) || !nonempty(v.Result) {
+				return fmt.Errorf("%w: incomplete patch validation", ErrInvalid)
+			}
 		}
 	}
 	b, _ := json.Marshal(s)

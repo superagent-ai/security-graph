@@ -40,9 +40,9 @@ On-prem uses the same engine/contracts against its own PostgreSQL or custom stor
 
 The app native workflow checks out the pinned engine source using `SECURITY_GRAPH_DEPLOY_KEY`, a read-only engine-repository deploy key. Its reviewed commit is configured through `SECURITY_GRAPH_INTEGRATION_REF`.
 
-This repository also runs the real native workflow for every trusted pull request and main push. `SUPERAGENT_APP_DEPLOY_KEY` is a separate read-only app-repository deploy key; `SUPERAGENT_APP_INTEGRATION_REF` selects an immutable app commit. Neither key grants writes or access to other repositories. Missing credentials or pins fail the check rather than silently skipping it. Fork pull requests do not receive these secrets.
+This repository's pull requests and main pushes run the standalone PostgreSQL/MCP integration suite, format/vet/build checks, schema and dependency checks, and container smoke checks. Native App end-to-end verification runs separately from the app checkout; it is not a CI job in this repository.
 
-Rotate a credential by replacing its consuming repository secret and then removing the old deploy key from the source repository. The native check starts real local Supabase, applies migrations, launches the current engine with the pinned app and exercises the same MCP/REST integration scenarios as local development.
+Rotate the app workflow's credential by replacing its consuming repository secret and then removing the old deploy key from the source repository.
 
 
 ## Native assessment execution

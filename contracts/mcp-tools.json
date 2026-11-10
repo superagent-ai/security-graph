@@ -846,7 +846,7 @@
       "openWorldHint": false,
       "readOnlyHint": false
     },
-    "description": "Persist a finding using the existing structured repository report template, code references, policy verification, PoC and validated patch evidence. Retained as an attributed claim with triage status new.",
+    "description": "Persist a finding using the shared six-section template, policy assessment, concrete PoC and remediation. Source files, code references, policy documents and a validated patch are optional. Missing code references require code_references_unavailable_reason in the Code References section; missing policy documents require policy_verification.docs_unavailable_reason in the policy conclusion. Supplied evidence is validated. Retained as an attributed claim with triage status new.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -854,6 +854,7 @@
           "additionalProperties": false,
           "properties": {
             "affected_files": {
+              "description": "Affected source files, when known. Omit for black-box assessments without source access.",
               "items": {
                 "type": "string"
               },
@@ -863,6 +864,7 @@
               ]
             },
             "code_references": {
+              "description": "Source evidence, when available. If omitted or empty, supply code_references_unavailable_reason and include that explanation in the Code References description section.",
               "items": {
                 "additionalProperties": false,
                 "properties": {
@@ -898,6 +900,10 @@
                 "null",
                 "array"
               ]
+            },
+            "code_references_unavailable_reason": {
+              "description": "Required when code_references is omitted or empty. Explain why source evidence was unavailable. Include this exact explanation in the Code References description section.",
+              "type": "string"
             },
             "cwe_ids": {
               "items": {
@@ -1023,6 +1029,7 @@
                   "type": "boolean"
                 },
                 "docs_reviewed": {
+                  "description": "Policy documents reviewed, when available. If omitted or empty, supply docs_unavailable_reason and include that explanation in conclusion.",
                   "items": {
                     "additionalProperties": false,
                     "properties": {
@@ -1048,6 +1055,10 @@
                     "array"
                   ]
                 },
+                "docs_unavailable_reason": {
+                  "description": "Required when docs_reviewed is omitted or empty. Explain why policy documents were unavailable. Include this exact explanation in conclusion.",
+                  "type": "string"
+                },
                 "documented_intended_behavior": {
                   "type": "boolean"
                 },
@@ -1056,7 +1067,6 @@
                 }
               },
               "required": [
-                "docs_reviewed",
                 "in_scope",
                 "contradicted_by_policy",
                 "documented_intended_behavior",
@@ -1069,6 +1079,7 @@
             },
             "proposed_patch": {
               "additionalProperties": false,
+              "description": "Optional source patch. If supplied, include the diff, files and validation evidence. Black-box findings still require remediation guidance.",
               "properties": {
                 "diff": {
                   "type": "string"
@@ -1123,7 +1134,10 @@
                 "files",
                 "validation"
               ],
-              "type": "object"
+              "type": [
+                "null",
+                "object"
+              ]
             },
             "remediation": {
               "type": "string"
@@ -1150,7 +1164,6 @@
           "required": [
             "id",
             "cwe_ids",
-            "affected_files",
             "summary",
             "impact",
             "details",
@@ -1159,9 +1172,7 @@
             "reproduction_steps",
             "policy_verification",
             "false_positive_analysis",
-            "code_references",
             "remediation",
-            "proposed_patch",
             "github_advisory"
           ],
           "type": "object"

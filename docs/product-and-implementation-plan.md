@@ -125,7 +125,7 @@ The native adapter now uses the existing app database and `sk_live_` API-key aut
 
 The submission contract must reuse the app’s structured finding authoring schema, validator, and Markdown formatter. The read API’s `description: string` is the rendered representation of that template, not the full authoring schema. Extract these contracts into `pkg/contracts` and use them for both native workers and external-agent submissions.
 
-The new MCP submission envelope requires `intent` alongside `finding`. The finding’s required fields below come from the existing verified repository `save_finding` contract. This excerpt shows the envelope and required field set; complete property definitions and nested validators must be extracted from the implementation.
+The new MCP submission envelope requires `intent` alongside `finding`. The finding fields come from the existing verified repository `save_finding` contract. External submissions extend that payload with explicit evidence applicability: source files, code references, policy documents, and proposed patches are optional when unavailable, allowing black-box assessments without invented evidence. This excerpt shows the envelope and required field set; complete property definitions and nested validators are published in `contracts/mcp-tools.json`.
 
 ```json
 {
@@ -146,9 +146,7 @@ The new MCP submission envelope requires `intent` alongside `finding`. The findi
       "type": "object",
       "required": [
         "cwe_ids",
-        "affected_files",
         "summary",
-        "code_references",
         "impact",
         "details",
         "proof",
@@ -157,7 +155,6 @@ The new MCP submission envelope requires `intent` alongside `finding`. The findi
         "policy_verification",
         "false_positive_analysis",
         "remediation",
-        "proposed_patch",
         "github_advisory"
       ]
     }
@@ -178,9 +175,9 @@ The shared template maps these structured fields to the existing finding descrip
 
 In the existing repository authoring payload, `github_advisory.description` carries the formatted Markdown with all six headings. The public finding exposes it as `description`. The triage investigation’s `triage.report_markdown` remains a separate field.
 
-The repository schema also requires a stable identifier through the outer or inner `id`; `title` and `severity` can be supplied directly or normalized from `github_advisory`. Preserve nested policy, code-reference, affected-product, and patch-validation requirements. Keep any additional source-specific sections, such as an attack-flow diagram, supported by the shared formatter.
+The repository schema also requires a stable identifier through the outer or inner `id`; `title` and `severity` can be supplied directly or normalized from `github_advisory`. External submissions retain the required policy conclusion and affected-product information; supplied policy documents, code references, and patches retain their nested validation requirements. Keep any additional source-specific sections, such as an attack-flow diagram, supported by the shared formatter.
 
-Use the same six-section template across all targets. Apply existing target-specific validation for source evidence and patches; black-box sources must not fabricate repository code or patch evidence to satisfy repository-only requirements. Any applicability extension must be explicit and versioned. It must not silently relax the current verified repository contract.
+Use the same six-section template across all targets. For external attributed submissions, omit unavailable source evidence and patches and explain the limitation in the relevant sections. Missing, null, or empty `code_references` requires a nonblank `code_references_unavailable_reason` repeated in the `Code References` section. Missing, null, or empty `policy_verification.docs_reviewed` requires a nonblank `policy_verification.docs_unavailable_reason` repeated in the policy conclusion. The generated MCP contract records this applicability extension; the App's native verified repository authoring contract retains its existing requirements. Black-box sources must not fabricate repository code or patch evidence.
 
 Submission validates both the structured content and the rendered template. Missing required sections or evidence return field-specific errors. Imported historical findings retain their original content and provenance.
 
