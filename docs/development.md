@@ -23,6 +23,8 @@ go run ./cmd/export-schemas > contracts/mcp-tools.json
 
 Pull requests and main run formatting, vet, build, module verification, PostgreSQL/MCP integration tests with the race detector, schema drift checks, and a container smoke check. Actions are pinned to commit SHAs. Issue and PR templates are copied unchanged from the landing/app repo.
 
+After all checks pass on a push to `main` (including a merged PR), CI deploys the tested container to the existing Google Cloud Run MCP service. The `gcp` GitHub environment supplies the target and Workload Identity Federation settings. Deployment preserves the service's database and runtime configuration, checks the candidate revision before routing traffic, and never applies migrations. See the [Cloud Run deployment guide](cloud-run-deployment.md#continuous-deployment-from-main) for setup and rollback.
+
 Pushing a semantic tag such as `v0.1.0` runs the checks again, builds Linux/macOS/Windows archives and checksums, publishes an amd64/arm64 container to `ghcr.io/superagent-ai/security-graph:<tag>`, and creates a release in this private repository. GitHub's token supplies publication permissions; no production deployment credentials are needed. No release is created by pushing main. Customer deployment and upgrades remain explicit operations.
 
 The first package publication should retain private visibility and repository access inheritance. The workflow includes container provenance and an SBOM. Deployment-specific TLS, identity, backups, and production runtime credentials are configured by the operator.
