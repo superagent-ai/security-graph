@@ -5,6 +5,7 @@
 **/.env
 **/.env.*
 credentials.json
+gha-creds-*.json
 **/credentials.json
 **/__pycache__
 **/*.pyc

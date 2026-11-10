@@ -1,0 +1,81 @@
+name: Deploy to GCP
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-gcp-main
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy MCP to Cloud Run
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: gcp
+      url: ${{ steps.deploy.outputs.url }}/mcp
+    env:
+      GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_SERVICE: ${{ vars.GCP_SERVICE }}
+      IMAGE_REPOSITORY: ${{ vars.GCP_IMAGE_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Validate deployment configuration
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          : "${GCP_PROJECT:?Set GCP_PROJECT in the gcp environment}"
+          : "${GCP_REGION:?Set GCP_REGION in the gcp environment}"
+          : "${GCP_SERVICE:?Set GCP_SERVICE in the gcp environment}"
+          : "${IMAGE_REPOSITORY:?Set GCP_IMAGE_REPOSITORY in the gcp environment}"
+          : "${WIF_PROVIDER:?Set GCP_WORKLOAD_IDENTITY_PROVIDER in the gcp environment}"
+          : "${DEPLOY_ACCOUNT:?Set GCP_DEPLOY_SERVICE_ACCOUNT in the gcp environment}"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: deployment-image
+          path: ${{ runner.temp }}/deployment-image
+      - name: Load tested image
+        run: docker load --input "$RUNNER_TEMP/deployment-image/security-graph.tar"
+      - name: Refuse deployment of a superseded main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+            echo 'This commit is no longer main. Deploy the latest main run instead.' >&2
+            exit 1
+          fi
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Push tested image to Artifact Registry
+        run: |
+          gcloud auth configure-docker "${IMAGE_REPOSITORY%%/*}" --quiet
+          image="${IMAGE_REPOSITORY}:${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker tag security-graph:check "$image"
+          docker push "$image"
+          digest="$(gcloud artifacts docker images describe "$image" --project="$GCP_PROJECT" --format='value(image_summary.digest)')"
+          echo "GRAPH_IMAGE=${IMAGE_REPOSITORY}@${digest}" >> "$GITHUB_ENV"
+      - name: Deploy and verify candidate before routing traffic
+        id: deploy
+        run: ./scripts/deploy-gcp.sh

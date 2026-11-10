@@ -1,8 +1,6 @@
 name: Checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_call:
@@ -12,7 +10,8 @@ permissions:
 
 concurrency:
   group: checks-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Let main finish deployment before starting another run. PR checks can cancel.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -72,6 +71,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-      - run: docker build -t security-graph:check .
+      - run: docker build --build-arg VERSION="$GITHUB_SHA" -t security-graph:check .
       - run: docker run --rm security-graph:check version
       - run: ./scripts/container-integration.sh security-graph:check
+      - name: Save tested deployment image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save security-graph:check --output "$RUNNER_TEMP/security-graph.tar"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: deployment-image
+          path: ${{ runner.temp }}/security-graph.tar
+          retention-days: 1
+          if-no-files-found: error

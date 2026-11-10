@@ -1,6 +1,7 @@
 .git
 .env*
 credentials.json
+gha-creds-*.json
 bin
 dist
 coverage.out
