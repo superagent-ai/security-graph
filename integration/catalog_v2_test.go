@@ -176,10 +176,16 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 				t.Fatalf("missing assigned node %s", id)
 			}
 		}
-		current, _ := catalog.Load()
-		for _, e := range current.Entries {
+		v2, err := catalog.LoadVersion("2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		foundDeprecated := false
+		for _, e := range v2.Entries {
 			if e.Deprecated {
+				foundDeprecated = true
 				a = writeArgs()
+				a["catalog_version"] = v2.Version
 				a["finding_id"] = findingID
 				a["expected_version"] = 1
 				a["expected_classification_version"] = saved.Version
@@ -187,8 +193,15 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 				a["compliance_ids"] = []string{e.ID}
 				a["rationale"] = "Retired controls must remain unavailable for new assignments."
 				failure(t, c.call(t, "set_finding_classification", a))
+				after := c.record(t, "get_finding_classification", map[string]any{"intent": "Verify rejected retired choice preserved the prior assignment.", "finding_id": findingID})
+				if after.Version != saved.Version || !bytes.Equal(after.Data, saved.Data) {
+					t.Fatal("rejected deprecated entry changed the saved classification")
+				}
 				break
 			}
+		}
+		if !foundDeprecated {
+			t.Fatal("v2 fixture must contain a deprecated entry")
 		}
 	})
 	t.Run("published releases retain different LLM numbering", func(t *testing.T) {
