@@ -123,6 +123,8 @@ func (a *Adapter) Put(ctx context.Context, tx pgx.Tx, p storage.Principal, r sto
 		err = a.report(ctx, tx, p, r, old, expected)
 	} else if r.Kind == "finding" {
 		err = a.finding(ctx, tx, p, r, old, expected)
+	} else if r.Kind == "comment" {
+		err = a.comment(ctx, tx, p, r, expected)
 	} else {
 		return r, contracts.ErrInvalid
 	}
@@ -204,7 +206,7 @@ func (a *Adapter) finding(ctx context.Context, tx pgx.Tx, p storage.Principal, r
 	}
 	typ := strings.TrimSuffix(f.Kind, "_red_team")
 	s, ok := sources[typ]
-	if !ok && f.Kind != "github_advisory" {
+	if !ok && f.Kind != "github_advisory" && f.Kind != "pr_scan" {
 		return contracts.ErrInvalid
 	}
 	if expected == 0 {
@@ -245,6 +247,23 @@ func (a *Adapter) finding(ctx context.Context, tx pgx.Tx, p storage.Principal, r
 	}
 	var before contracts.Finding
 	_ = json.Unmarshal(old.Data, &before)
+	if f.Kind == "pr_scan" {
+		// PR versions also include scan/reviewer timestamps. Compare the live
+		// projection rather than only the underlying finding's updated_at.
+		tag, err := tx.Exec(ctx, `UPDATE public.protection_findings SET triage_status=$1,triage_resolution=$2,triaged_at=$3,updated_at=clock_timestamp()
+ WHERE id=$4 AND $5=(SELECT version FROM security_graph.app_records WHERE organization_id=$6 AND id=$4::text AND kind='finding')`, f.Triage.Status, f.Triage.Resolution, triagedAt(f.Triage.Status), r.ID, expected, p.OrganizationID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return storage.ErrConflict
+		}
+		if f.Triage.Status != "resolved" {
+			_, err = tx.Exec(ctx, `DELETE FROM public.protection_finding_dismissals d USING public.protection_findings f,public.protection_repositories repo
+ WHERE f.id=$1 AND repo.repository_id=f.repository_id AND repo.organization_id=$2 AND d.owner=repo.owner AND d.repo=repo.name AND d.pr_number=f.pull_number AND d.finding_fingerprint=f.fingerprint`, r.ID, p.OrganizationID)
+		}
+		return err
+	}
 	table := s.finding
 	if f.Kind == "github_advisory" {
 		table = "protection_advisories"

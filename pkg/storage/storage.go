@@ -74,12 +74,14 @@ type Query struct {
 	Offset       int
 }
 type Change struct {
-	Cursor    int64     `json:"cursor"`
-	EntityID  string    `json:"entity_id"`
-	Kind      string    `json:"kind"`
-	Version   int64     `json:"version"`
-	ActorID   string    `json:"actor_id"`
-	CreatedAt time.Time `json:"created_at"`
+	Cursor    int64           `json:"cursor"`
+	EntityID  string          `json:"entity_id"`
+	Kind      string          `json:"kind"`
+	Version   int64           `json:"version"`
+	ActorID   string          `json:"actor_id"`
+	CreatedAt time.Time       `json:"created_at"`
+	Operation string          `json:"operation,omitempty"`
+	Details   json.RawMessage `json:"details,omitempty"`
 }
 type Call struct {
 	Intent    string
@@ -96,6 +98,15 @@ type Reader interface {
 type Transaction interface {
 	Reader
 	Put(context.Context, Record, int64) (Record, error)
+}
+
+// FindingComments is optional for custom backends. It operates on authorized
+// canonical comments; deleted comments must disappear from graph reads too.
+type CommentReader interface {
+	FindingComments(context.Context, string, int, int) ([]Record, int64, error)
+}
+type CommentDeleter interface {
+	DeleteComment(context.Context, Record, int64) error
 }
 
 // View provides a consistent authorized snapshot. Update must serialize competing

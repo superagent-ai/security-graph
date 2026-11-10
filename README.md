@@ -34,7 +34,9 @@ An agent reviewing a change needs to know what has already been investigated: wh
 - **During an assessment:** Record structured findings with code references, a PoC, and remediation evidence using Superagent's finding template.
 - **After an assessment:** Finish the report and let authorized reviewers update finding dispositions. Later agents can retrieve the results.
 
-The graph connects security records: assets, reports, findings, and vulnerability classifications. Those relationships let an agent follow a finding back to its assessment or retrieve findings for related assets.
+The graph connects security records: assets, reports, findings, reviewer comments, and vulnerability classifications. Those relationships let an agent follow a finding back to its assessment or retrieve findings for related assets.
+
+Agents can [add, read, edit, and delete finding comments](docs/finding-comments.md) directly through MCP. Discussions stay attached to the finding and are available to later agents as attributed review context.
 
 Your agents perform the assessments; Security Graph preserves what they learn. Use your own agents and models, and run the Go service with PostgreSQL on your infrastructure.
 

@@ -23,3 +23,13 @@ records with their usual concurrency, audit and idempotency guarantees. See
 
 
 `Query.Source` filters exact canonical `data.source` attribution. Apply it together with the existing organization, target, kind, status, search and keyset constraints; do not implement it as a substring search or allow it to expand access.
+
+Finding discussions add the `comment` record kind and the optional
+`storage.CommentReader` / `storage.CommentDeleter` interfaces. Implement listing
+with exact parent finding scope, newest-first pagination and total, and atomic
+version-fenced deletion. `Put` must persist comments and create their
+`comments_on` graph connection in the same transaction. Deletion removes live
+comment nodes/connections and records an audit event. Native adapters project
+canonical App rows and edges instead of copying them. Custom backends without
+these interfaces retain their existing tools but do not support comment listing
+or deletion. See [finding comments](finding-comments.md).
