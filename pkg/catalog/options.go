@@ -12,10 +12,11 @@ import (
 // OptionsQuery bounds each independent selection list. Cursors apply to the
 // immutable release and exact normalized filters, never to tenant records.
 type OptionsQuery struct {
-	Query       string `json:"query,omitempty" jsonschema:"Search IDs, names, descriptions and aliases (for example clickjacking, CWE-770, SQL injection). Maximum 200 bytes. Refine searches rather than reading the entire catalog."`
-	FrameworkID string `json:"framework_id,omitempty" jsonschema:"Optional framework ID from frameworks; filter compliance and types with relevance links to that framework."`
-	Limit       int    `json:"limit,omitempty" jsonschema:"Maximum choices per list, default 25, maximum 100."`
-	Cursor      string `json:"cursor,omitempty" jsonschema:"Resume next_cursor with the same query, framework_id and limit."`
+	CatalogVersion string `json:"catalog_version,omitempty" jsonschema:"Optional immutable catalog version; omit to search the current release. Copy the returned catalog_version into every selection."`
+	Query          string `json:"query,omitempty" jsonschema:"Search IDs, names, descriptions and aliases (for example clickjacking, CWE-770, SQL injection). Maximum 200 bytes. Refine searches rather than reading the entire catalog."`
+	FrameworkID    string `json:"framework_id,omitempty" jsonschema:"Optional framework ID from frameworks; filter compliance and types with relevance links to that framework."`
+	Limit          int    `json:"limit,omitempty" jsonschema:"Maximum choices per list, default 25, maximum 100."`
+	Cursor         string `json:"cursor,omitempty" jsonschema:"Resume next_cursor with the same query, framework_id and limit."`
 }
 type Options struct {
 	CatalogVersion  string      `json:"catalog_version"`
@@ -30,6 +31,27 @@ type Options struct {
 type optionsCursor struct {
 	Version, Filter string
 	Offset          int
+}
+
+// A continuation stays on the release its first page read, even if the service
+// is upgraded between requests. Explicit conflicting versions still fail below.
+func OptionsCatalog(q OptionsQuery) (Catalog, error) {
+	version := q.CatalogVersion
+	if version == "" && q.Cursor != "" {
+		if len(q.Cursor) > 512 {
+			return Catalog{}, fmt.Errorf("invalid catalog cursor")
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(q.Cursor)
+		var cursor optionsCursor
+		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Version == "" {
+			return Catalog{}, fmt.Errorf("invalid catalog cursor")
+		}
+		version = cursor.Version
+	}
+	if version == "" {
+		return Load()
+	}
+	return LoadVersion(version)
 }
 
 func (c Catalog) Options(q OptionsQuery) (Options, error) {

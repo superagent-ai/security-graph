@@ -80,7 +80,7 @@ Finding submissions support source-assisted and black-box assessments. Include t
 3. Retrieve existing context using `get_context` or the finding/report tools.
 4. Start an external assessment with `create_report`. This records a run; it does not launch a Superagent scan.
 5. Submit a structured finding with `submit_finding`. Include the policy assessment, concrete PoC, reproduction steps, impact, and remediation. Include code references, affected files, reviewed policy documents, and proposed patch validation evidence when available. New submissions are attributed claims with triage status `new`, not independently confirmed vulnerabilities.
-6. Read `get_classification_options` and call `set_finding_classification` with agent-selected `type_ids`, `compliance_ids`, rationale, and current versions. Native App tools save the same object atomically. Empty arrays explicitly mean no applicable choice. Hosted deployments do not run Julia inference.
+6. Read `get_classification_options` and call `set_finding_classification` with agent-selected `type_ids`, `compliance_ids`, rationale, the returned `catalog_version`, and current finding/classification versions. Native App tools save the same object atomically. Empty arrays explicitly mean no applicable choice. Hosted deployments do not run Julia inference.
 7. Record execution completion using `finish_report`. The engine handles empty/all-resolved reports and unresolved review state.
 8. Use `update_finding_triage` or `update_report_review_status` only with disposition permission and a current `expected_version`.
 

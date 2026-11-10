@@ -54,7 +54,7 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		return client{url: api.URL, token: token}
 	}
 	c := issue(org, "", true, "read", "submit", "graph:write", "export")
-	out := c.call(t, "get_vulnerability_catalog", map[string]any{"intent": "Discover curated vulnerability types and framework mappings."})
+	out := c.call(t, "get_vulnerability_catalog", map[string]any{"intent": "Discover curated vulnerability types and framework mappings.", "catalog_version": "current"})
 	var cat catalog.Catalog
 	if err = json.Unmarshal(out.Result.Structured, &cat); err != nil {
 		t.Fatal(err)
@@ -99,13 +99,14 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		a["expected_version"] = f.Version
 		a["expected_classification_version"] = version
 		a["type_ids"] = ids
+		a["catalog_version"] = "2"
 		a["compliance_ids"] = []string{}
 		a["rationale"] = "The fixture omits authorization before reading a tenant record."
 		return a
 	}
 	t.Run("agent selects both catalog lists without a classifier", func(t *testing.T) {
 		_, f := create(c, "agent-selected")
-		options := c.call(t, "get_classification_options", map[string]any{"intent": "Choose explicit evidence-backed category and compliance IDs."})
+		options := c.call(t, "get_classification_options", map[string]any{"intent": "Choose explicit evidence-backed category and compliance IDs.", "limit": 25})
 		var lists struct {
 			Types      []catalog.Type  `json:"vulnerability_types"`
 			Compliance []catalog.Entry `json:"compliance"`

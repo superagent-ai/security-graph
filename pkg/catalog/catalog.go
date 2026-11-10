@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 	"sync"
@@ -16,7 +17,7 @@ import (
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
-//go:embed v1.json v2.json
+//go:embed v*.json
 var files embed.FS
 
 type Type struct {
@@ -73,25 +74,53 @@ type Notice struct {
 	Text   string `json:"text"`
 }
 
+var releases = sync.OnceValue(func() map[string]Catalog {
+	out := map[string]Catalog{}
+	names, err := fs.Glob(files, "v*.json")
+	if err != nil {
+		panic(err)
+	}
+	for _, name := range names {
+		raw, err := files.ReadFile(name)
+		if err != nil {
+			panic(err)
+		}
+		var c Catalog
+		if err := json.Unmarshal(raw, &c); err != nil {
+			panic(err)
+		}
+		if err := c.Validate(); err != nil {
+			panic(err)
+		}
+		if name != "v"+c.Version+".json" {
+			panic("catalog filename/version mismatch")
+		}
+		out[c.Version] = c
+	}
+	return out
+})
+
 func Load() (Catalog, error) {
-	return LoadVersion("2")
+	var latest Catalog
+	for _, c := range releases() {
+		if c.ReleasedAt.After(latest.ReleasedAt) || (c.ReleasedAt.Equal(latest.ReleasedAt) && c.Version > latest.Version) {
+			latest = c
+		}
+	}
+	if latest.Version == "" {
+		return latest, fmt.Errorf("no published catalog")
+	}
+	return latest, nil
 }
 
-// LoadVersion retains immutable releases so earlier assignments keep their meaning.
+// LoadVersion resolves immutable published releases without filesystem input.
 func LoadVersion(version string) (Catalog, error) {
-	var c Catalog
-	if version != "1" && version != "2" {
-		return c, fmt.Errorf("unknown catalog version")
+	if c, ok := releases()[version]; ok {
+		return c, nil
 	}
-	b, err := files.ReadFile("v" + version + ".json")
-	if err != nil {
-		return c, err
-	}
-	if err = json.Unmarshal(b, &c); err != nil {
-		return c, err
-	}
-	return c, c.Validate()
+	return Catalog{}, fmt.Errorf("unknown catalog version")
 }
+
 func (c Catalog) Type(id string) (Type, bool) {
 	for _, t := range c.Types {
 		if t.ID == id {
@@ -231,11 +260,7 @@ type recordArchive struct {
 
 var archive = sync.OnceValue(func() recordArchive {
 	result := recordArchive{byID: map[string]storage.Record{}, adjacency: map[string][]storage.Record{}}
-	for _, version := range []string{"1", "2"} {
-		c, err := LoadVersion(version)
-		if err != nil {
-			panic(err)
-		}
+	for _, c := range releases() {
 		for _, r := range c.Records() {
 			result.records = append(result.records, r)
 			result.byID[r.ID] = r

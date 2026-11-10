@@ -134,7 +134,7 @@ func nativeSelection(input map[string]any) (map[string]any, *ClassificationSelec
 	if err := decoder.Decode(&selection); err != nil {
 		return nil, nil, contracts.ErrInvalid
 	}
-	if err := validateSelection(currentCatalog(), selection); err != nil {
+	if err := validateSelection(selection); err != nil {
 		return nil, nil, err
 	}
 	return payload, &selection, nil

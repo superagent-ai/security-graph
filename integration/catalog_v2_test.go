@@ -3,6 +3,8 @@ package integration_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -22,6 +24,78 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 		}
 		return page
 	}
+	t.Run("public versioned definitions and conditional cache contract", func(t *testing.T) {
+		for _, version := range []string{"", "1", "2"} {
+			url := c.url + "/catalog"
+			if version != "" {
+				url += "?version=" + version
+			}
+			r, err := http.Get(url)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, _ := io.ReadAll(r.Body)
+			_ = r.Body.Close()
+			var release catalog.Catalog
+			if r.StatusCode != 200 || json.Unmarshal(raw, &release) != nil || release.Validate() != nil {
+				t.Fatal("invalid public definitions")
+			}
+			if (version != "" && release.Version != version) || bytes.Contains(raw, []byte(findingID)) {
+				t.Fatal("public catalog mixed versions or tenant content")
+			}
+			if r.Header.Get("ETag") == "" {
+				t.Fatal("missing catalog validator")
+			}
+			request, _ := http.NewRequest("GET", url, nil)
+			request.Header.Set("If-None-Match", r.Header.Get("ETag"))
+			cached, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = cached.Body.Close()
+			if cached.StatusCode != 304 {
+				t.Fatal("immutable cache validation failed")
+			}
+		}
+		r, err := http.Get(c.url + "/catalog?version=missing")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = r.Body.Close()
+		if r.StatusCode != 404 {
+			t.Fatal("unknown release must not fall back to current")
+		}
+	})
+	t.Run("legacy full lists and selections retain the original edition", func(t *testing.T) {
+		out := read(map[string]any{})
+		if out.CatalogVersion != "1" || len(out.Types) != 16 || out.NextCursor != "" {
+			t.Fatal("legacy agents received truncated or changed choices")
+		}
+		a := writeArgs()
+		a["finding_id"] = findingID
+		a["expected_version"] = 1
+		a["expected_classification_version"] = 0
+		a["type_ids"] = []string{"excessive_agency"}
+		a["compliance_ids"] = []string{"owasp-llm:LLM06"}
+		a["rationale"] = "An in-flight legacy agent keeps the exact edition it read."
+		saved := c.record(t, "set_finding_classification", a)
+		if !bytes.Contains(saved.Data, []byte(`"catalog_version":"1"`)) {
+			t.Fatal("legacy save was reinterpreted as the current edition")
+		}
+		// Explicit releases remain valid even after a newer catalog is current.
+		a = writeArgs()
+		a["finding_id"] = findingID
+		a["expected_version"] = 1
+		a["expected_classification_version"] = saved.Version
+		a["catalog_version"] = "1"
+		a["type_ids"] = []string{"excessive_agency"}
+		a["compliance_ids"] = []string{"owasp-llm:LLM06"}
+		a["rationale"] = "A versioned agent also keeps the edition it used."
+		saved = c.record(t, "set_finding_classification", a)
+		if !bytes.Contains(saved.Data, []byte(`"catalog_version":"1"`)) {
+			t.Fatal("explicit historical selection changed meaning")
+		}
+	})
 	t.Run("bounded complete discovery and filter-bound cursors", func(t *testing.T) {
 		types, entries := map[string]bool{}, map[string]bool{}
 		cursor := ""
@@ -86,8 +160,10 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 		a := writeArgs()
 		a["finding_id"] = findingID
 		a["expected_version"] = 1
-		a["expected_classification_version"] = 0
+		prior := c.record(t, "get_finding_classification", map[string]any{"intent": "Read prior classification version.", "finding_id": findingID})
+		a["expected_classification_version"] = prior.Version
 		a["type_ids"] = []string{"clickjacking"}
+		a["catalog_version"] = "2"
 		a["compliance_ids"] = []string{"cwe:CWE-1021", "owasp-web:A02", "owasp-asvs:V3.4.6"}
 		a["rationale"] = "Demonstrate explicit independent selections and graph persistence; the controls require anti-framing policy; this test does not assert certification."
 		saved := c.record(t, "set_finding_classification", a)

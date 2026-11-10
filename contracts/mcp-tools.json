@@ -274,10 +274,14 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Search selectable vulnerability_types and compliance lists with query and optional framework_id. Default 25 choices per list, maximum 100; resume next_cursor with the same filters and limit. Framework metadata states exact coverage. Select both lists independently; mappings never prove compliance.",
+    "description": "Search selectable vulnerability_types and compliance lists with query and optional framework_id. Pass query or limit for current paged discovery; legacy intent-only calls return the complete v1 lists. Copy catalog_version into every save. Default 25 choices per list, maximum 100; resume next_cursor with the same filters and limit. Framework metadata states exact coverage. Select both lists independently; mappings never prove compliance.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "catalog_version": {
+          "description": "Optional immutable catalog version; omit to search the current release. Copy the returned catalog_version into every selection.",
+          "type": "string"
+        },
         "cursor": {
           "description": "Resume next_cursor with the same query, framework_id and limit.",
           "type": "string"
@@ -490,10 +494,14 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Export the full current immutable catalog (large). Agents should search get_classification_options instead. Catalog IDs cannot be created by agents.",
+    "description": "Export immutable public definitions. Pass catalog_version: current for the full current release (large), or a saved version. Intent-only legacy calls retain v1. Agents should search get_classification_options instead. Catalog IDs cannot be created by agents.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "catalog_version": {
+          "description": "Read an immutable release, or current. Omission preserves the complete legacy v1 export.",
+          "type": "string"
+        },
         "intent": {
           "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
           "maxLength": 500,
@@ -761,6 +769,10 @@
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "catalog_version": {
+          "description": "Copy catalog_version from get_classification_options. Omission is reserved for legacy catalog v1 selections, never the current release.",
+          "type": "string"
+        },
         "compliance_ids": {
           "description": "Select zero or more compliance/framework entry IDs from get_classification_options. Empty means no applicable mapping; mappings are not proof of compliance.",
           "items": {
