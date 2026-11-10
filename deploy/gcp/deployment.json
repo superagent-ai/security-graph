@@ -1,14 +1,14 @@
 {
-  "deployed_at": "2026-11-10T09:43:15.842163+00:00",
+  "deployed_at": "2026-11-10T11:08:23.727134Z",
   "project": "superagent-410019",
   "region": "europe-west1",
   "service": "security-graph",
   "url": "https://security-graph-408394858807.europe-west1.run.app",
   "mcp_url": "https://security-graph-408394858807.europe-west1.run.app/mcp",
-  "revision": "security-graph-agent-choices-1b89d30",
-  "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:56f5bbc26270b516f31177549a4a15d24fa67fba923c70961df4a33314bb6e14",
-  "build_id": "d407b665-461b-415c-ba5c-bf89cb7b39a2",
-  "behavior_commit": "1b89d309be1699db1bcc79408d8a8cd8b36ee9f4",
+  "revision": "security-graph-agent-only-df6166b",
+  "image": "europe-west1-docker.pkg.dev/superagent-410019/security-graph/service@sha256:12ee572d40e32f3fde9956524561f203775cb064bf3b4e120b0135f777088231",
+  "build_id": "96b14b3e-7146-4f2b-9e5e-4ed41c1697f0",
+  "behavior_commit": "df6166b11eb4d47fb448b02cfa7479ac16385d75",
   "storage_backend": "superagent",
   "traffic_percent": 100,
   "traffic_tag": "local-db-test",
@@ -17,7 +17,9 @@
     "choice_tool": "get_classification_options",
     "write_tool": "set_finding_classification",
     "automatic_inference": false,
-    "python_or_julia_runtime": false
+    "python_or_julia_runtime": false,
+    "legacy_type_only_tool": false,
+    "local_model_configuration": false
   },
   "database": {
     "existing_connection_unchanged": true,
@@ -29,6 +31,12 @@
     "app_hosted_integration_checks": 21,
     "app_hosted_integration_result": "passed",
     "classification_jobs_pending_or_processing": 0,
-    "isolated_fixtures_removed": true
+    "isolated_fixtures_removed": true,
+    "selection_lists_non_nullable": true,
+    "live_and_exported_contract_match": true,
+    "app_commit": "b59ab6678fd12d975dd609eb92a8db56e13dbb12",
+    "hosted_classification_gateway": "passed",
+    "app_graph_and_scanner_checks": 9,
+    "broader_gateway_run": "local App MCP rate limit reached"
   }
 }
