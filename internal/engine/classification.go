@@ -29,21 +29,23 @@ func (e *Engine) Catalog(p storage.Principal, intent string) (catalog.Catalog, e
 	if err := authorize(p, intent, "read"); err != nil {
 		return catalog.Catalog{}, err
 	}
-	return catalog.Load()
+	return currentCatalog(), nil
 }
 
-func (e *Engine) ClassificationOptions(p storage.Principal, intent string) (any, error) {
-	if err := authorize(p, intent, "read"); err != nil {
+type ClassificationOptionsInput struct {
+	Call
+	catalog.OptionsQuery
+}
+
+func (e *Engine) ClassificationOptions(p storage.Principal, in ClassificationOptionsInput) (any, error) {
+	if err := authorize(p, in.Intent, "read"); err != nil {
 		return nil, err
 	}
-	c := currentCatalog()
-	types := []catalog.Type{}
-	for _, t := range c.Types {
-		if t.Classifiable && !t.Deprecated {
-			types = append(types, t)
-		}
+	out, err := currentCatalog().Options(in.OptionsQuery)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", contracts.ErrInvalid, err)
 	}
-	return map[string]any{"catalog_version": c.Version, "vulnerability_types": types, "compliance": c.Entries, "frameworks": c.Frameworks, "mappings": c.Mappings}, nil
+	return out, nil
 }
 
 type ClassificationVersionInput struct {
@@ -103,7 +105,7 @@ func validateSelection(c catalog.Catalog, selection ClassificationSelection) err
 	}
 	allowed := map[string]bool{}
 	for _, entry := range c.Entries {
-		allowed[entry.ID] = true
+		allowed[entry.ID] = !entry.Deprecated
 	}
 	seen := map[string]bool{}
 	for _, id := range selection.ComplianceIDs {
@@ -166,7 +168,7 @@ func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record
 	if r, err := tx.Get(ctx, id); err != storage.ErrNotFound {
 		return r, err
 	}
-	if r, ok := currentCatalog().Get(id); ok {
+	if r, ok := catalog.Get(id); ok {
 		if r.Kind == "relationship" {
 			var rel contracts.Relationship
 			_ = json.Unmarshal(r.Data, &rel)
@@ -240,7 +242,6 @@ func classificationEdge(r storage.Record, cl Classification, id string) storage.
 // graphEdges projects current classification assignments into instance_of edges.
 // All finding lookups and classification queries use the authenticated snapshot.
 func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit func(storage.Record) error) error {
-	c := currentCatalog()
 	collisions := map[string]bool{}
 	virtualAvailable := func(ids ...string) (bool, error) {
 		for _, id := range ids {
@@ -263,7 +264,7 @@ func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit fun
 	for _, id := range front {
 		connected[id] = true
 	}
-	for _, r := range c.Records() {
+	for _, r := range catalog.Adjacent(front...) {
 		if r.Kind != "relationship" {
 			continue
 		}

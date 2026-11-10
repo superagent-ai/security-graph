@@ -274,15 +274,31 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Read the selectable vulnerability_types and compliance lists (IDs, names, descriptions, framework releases and reference mappings). Select both independently; do not invent IDs or treat mappings as compliance certification.",
+    "description": "Search selectable vulnerability_types and compliance lists with query and optional framework_id. Default 25 choices per list, maximum 100; resume next_cursor with the same filters and limit. Framework metadata states exact coverage. Select both lists independently; mappings never prove compliance.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
+        "cursor": {
+          "description": "Resume next_cursor with the same query, framework_id and limit.",
+          "type": "string"
+        },
+        "framework_id": {
+          "description": "Optional framework ID from frameworks; filter compliance and types with relevance links to that framework.",
+          "type": "string"
+        },
         "intent": {
           "description": "Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets.",
           "maxLength": 500,
           "minLength": 1,
           "pattern": "\\S",
+          "type": "string"
+        },
+        "limit": {
+          "description": "Maximum choices per list, default 25, maximum 100.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "Search IDs, names, descriptions and aliases (for example clickjacking, CWE-770, SQL injection). Maximum 200 bytes. Refine searches rather than reading the entire catalog.",
           "type": "string"
         }
       },
@@ -474,7 +490,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Read the immutable vulnerability types, hierarchy, framework releases and sourced mappings. Catalog IDs cannot be created by agents.",
+    "description": "Export the full current immutable catalog (large). Agents should search get_classification_options instead. Catalog IDs cannot be created by agents.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -748,26 +764,6 @@
         "compliance_ids": {
           "description": "Select zero or more compliance/framework entry IDs from get_classification_options. Empty means no applicable mapping; mappings are not proof of compliance.",
           "items": {
-            "enum": [
-              "cwe:CWE-89",
-              "owasp-web:A05",
-              "cwe:CWE-78",
-              "cwe:CWE-79",
-              "cwe:CWE-918",
-              "owasp-web:A01",
-              "cwe:CWE-22",
-              "cwe:CWE-862",
-              "cwe:CWE-639",
-              "cwe:CWE-287",
-              "cwe:CWE-502",
-              "cwe:CWE-200",
-              "aiuc-1:B002",
-              "aiuc-1:B006",
-              "owasp-llm:LLM01",
-              "owasp-llm:LLM06",
-              "mitre-atlas:AML.T0051",
-              "mitre-atlas:AML.T0051.001"
-            ],
             "type": "string"
           },
           "type": "array",
@@ -802,24 +798,6 @@
         "type_ids": {
           "description": "Select zero or more vulnerability type IDs from get_classification_options. Never invent IDs.",
           "items": {
-            "enum": [
-              "sql_injection",
-              "blind_sql_injection",
-              "command_injection",
-              "cross_site_scripting",
-              "stored_xss",
-              "ssrf",
-              "path_traversal",
-              "missing_authorization",
-              "idor",
-              "authentication_bypass",
-              "insecure_deserialization",
-              "sensitive_data_exposure",
-              "prompt_injection",
-              "indirect_prompt_injection",
-              "excessive_agency",
-              "unsafe_tool_use"
-            ],
             "type": "string"
           },
           "type": "array",

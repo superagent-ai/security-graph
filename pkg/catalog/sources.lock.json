@@ -1,0 +1,158 @@
+{
+  "aiuc-index": {
+    "url": "https://standard.aiuc-1.com/llms.txt",
+    "sha256": "3b5f7ab228b54b148b4d33aef9592f2165b3fc28acf53f68b5428c6f26445215"
+  },
+  "cwe-5.0": {
+    "url": "https://cwe.mitre.org/data/xml/cwec_v5.0.xml.zip",
+    "sha256": "bcda44c9abf61ff977f50c3c6649eea5a97a7b0626b0396c2c3ec4bfb973a3dc"
+  },
+  "mitre-atlas": {
+    "url": "https://raw.githubusercontent.com/mitre-atlas/atlas-data/f56c1468731d6428e5bf875263b4643b46d67437/dist/v6/ATLAS-2026.10.yaml",
+    "sha256": "ac41ee9f99a47084ba5fdfc77ae83a28687e12390240fffeb37df7914ffe142d"
+  },
+  "nist-800-171": {
+    "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/f0de6d8d8c059d374f15e0ae07508d82e370fc1d/nist.gov/SP800-171/rev3/json/NIST_SP800-171_rev3_catalog.json",
+    "sha256": "fd68bad4c1fee98dd1b2511884b585fb1f14265d4c5693d0492a25dd66e73dde"
+  },
+  "nist-800-53": {
+    "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/f0de6d8d8c059d374f15e0ae07508d82e370fc1d/nist.gov/SP800-53/rev5/json/NIST_SP-800-53_rev5_catalog.json",
+    "sha256": "64ca6b4161de51ab6af098a7d101d326f14c95e1abf721396cd8a049e8115eeb"
+  },
+  "nist-ai-rmf": {
+    "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/f0de6d8d8c059d374f15e0ae07508d82e370fc1d/nist.gov/AI100-1/ver1/json/NIST_AI-RMF_v1_catalog.json",
+    "sha256": "09de09ecd15f861c4ec05aa192872dc2faafc3bef41c4bc57e19247e84f92545"
+  },
+  "nist-csf": {
+    "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/f0de6d8d8c059d374f15e0ae07508d82e370fc1d/nist.gov/CSF/v2.0/json/NIST_CSF_v2.0_catalog.json",
+    "sha256": "0ac12904a4bcd877ec91be8e7ddc27278c88b0088c7db77d60ee24918e2563e2"
+  },
+  "nist-ssdf": {
+    "url": "https://raw.githubusercontent.com/usnistgov/oscal-content/f0de6d8d8c059d374f15e0ae07508d82e370fc1d/nist.gov/SP800-218/ver1/json/NIST_SP800-218_ver1_catalog.json",
+    "sha256": "fb864f27ccfe2c501737455180db91d8c05285a2ebb3fe1bdf1e193b06081634"
+  },
+  "owasp-api-1": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa1-broken-object-level-authorization.md",
+    "sha256": "f5a827897509a005095c306d05e56b8dc713717a78cb5360a2ba4b3c29bf4b2b"
+  },
+  "owasp-api-10": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xaa-unsafe-consumption-of-apis.md",
+    "sha256": "b5fe9034253ca2d7f7c4c9ef0a6db2b71da1689490911a5bb1f5aad2cab78706"
+  },
+  "owasp-api-2": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa2-broken-authentication.md",
+    "sha256": "9c15446740599f7bcf709a406ca5627028793e701dd1798ba711a95e9b933971"
+  },
+  "owasp-api-3": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa3-broken-object-property-level-authorization.md",
+    "sha256": "d316b89ee31f4689d4a4fafd1b97b62b7d05ac880945a478991ae4abf64a961d"
+  },
+  "owasp-api-4": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa4-unrestricted-resource-consumption.md",
+    "sha256": "8df9df403fd0007bc28bd9a9a60e46739c6797b1f7135c7f0f683a7362f40e38"
+  },
+  "owasp-api-5": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa5-broken-function-level-authorization.md",
+    "sha256": "bdaf0f1f0ec6e527c0c30aaca50a7328ed5b3c386bf6ab86e878116f4a3dd808"
+  },
+  "owasp-api-6": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows.md",
+    "sha256": "b499f299f634b20557d0f9e335b105d6a738039fe5436b3eb09fe7f74ce63a27"
+  },
+  "owasp-api-7": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa7-server-side-request-forgery.md",
+    "sha256": "f1abf2f9d55a0b50a2004e44bc2ea95348c41452197bc5d1bc7dd71b70f52e6c"
+  },
+  "owasp-api-8": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa8-security-misconfiguration.md",
+    "sha256": "13b9629746921f2ccd6fac1364cdfbb50f10d7b11faf668589d9994716c333de"
+  },
+  "owasp-api-9": {
+    "url": "https://raw.githubusercontent.com/OWASP/API-Security/33cea37b2ffde3e2e62f6b5d79a029a22a846633/editions/2023/en/0xa9-improper-inventory-management.md",
+    "sha256": "8d5d7e6130fac2b28f5808508d4f90683d99ae5a37f9d3d0d9714c853c39ca4f"
+  },
+  "owasp-asvs": {
+    "url": "https://raw.githubusercontent.com/OWASP/ASVS/180622b1329ee7ed349c9f5ce5e14fa91f42c359/5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.json",
+    "sha256": "bcdbec214d70abcfad9284a31d4f9e5134305831d628aad3aa85d7e26626cb35"
+  },
+  "owasp-llm-1": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM01_PromptInjection.md",
+    "sha256": "ff036047755c505e6d7837a0114f6056f8f751a3628061b6711b6eac19e1f8b0"
+  },
+  "owasp-llm-10": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM10_ImproperOutputHandling.md",
+    "sha256": "d61a5ca0eddb38cdd0f485d642ed263c259638e2f1cf82eb1563c064491d67f0"
+  },
+  "owasp-llm-2": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM02_SensitiveInformationDisclosure.md",
+    "sha256": "009153f4880fdabd79585cf1b74e60e2dfe79668c5581853890aa2bec36ab05e"
+  },
+  "owasp-llm-3": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM03_ExcessiveAgency.md",
+    "sha256": "e961d0d9fe8382be4086aaddd65c1fad0d5d53220174493fe8c287f864c0529e"
+  },
+  "owasp-llm-4": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM04_SupplyChain.md",
+    "sha256": "b5cb83fe937ecf38b8017918ac90b378da6d9c8ec9e2b485f422c08e4d66ac9e"
+  },
+  "owasp-llm-5": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM05_DataModelPoisoning.md",
+    "sha256": "28ba5d86c102c82916066aae4bde2c10605cdb98cca51f572093ba002d2a198d"
+  },
+  "owasp-llm-6": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM06_UnboundedConsumption.md",
+    "sha256": "e121147737d4750f89466fe191b5581fe71a822d8e1cfb621ea91d0d6a1dc6d5"
+  },
+  "owasp-llm-7": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM07_Misinformation.md",
+    "sha256": "5686479c061cd2057b9905775ce70fc92b1b26e9daf296928521d56837ad4732"
+  },
+  "owasp-llm-8": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM08_HiddenContextExposure.md",
+    "sha256": "e00d214f81757f626510df57e92116bec026b6c31ef7c3fb2bb52b71318c5ffe"
+  },
+  "owasp-llm-9": {
+    "url": "https://raw.githubusercontent.com/GenAI-Security-Project/GenAI-LLM-Top10/9253e38ade58e959b531c0c5c9a4842272c9cd0e/2026/final/LLM09_VectorAndEmbeddingWeaknesses.md",
+    "sha256": "e1a3aff504a708d46c5dbf1c4bbc9ae05f3206cc6ea8e6e9d544b3f0d0ff7c23"
+  },
+  "owasp-web-A01": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A01_2025-Broken_Access_Control.md",
+    "sha256": "d6ebc4e65422ff4fa32c310dec3c20ed6e804edfd2d06c7e5b8a802645f556ec"
+  },
+  "owasp-web-A02": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A02_2025-Security_Misconfiguration.md",
+    "sha256": "0df66f6c3e23ee8234567b20de786bf579dac1561632dd532d64130bb2aa2d75"
+  },
+  "owasp-web-A03": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A03_2025-Software_Supply_Chain_Failures.md",
+    "sha256": "d4108c04991ef2f5ab1d8ef301b51cfeef0fea35c550665c3dcfba7aa346758e"
+  },
+  "owasp-web-A04": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A04_2025-Cryptographic_Failures.md",
+    "sha256": "43d7da6637dc9d7ad7d9f7a017afc36123beb96c13d4e35d986f89bca341eaad"
+  },
+  "owasp-web-A05": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A05_2025-Injection.md",
+    "sha256": "d617676bd8d03ab656a481d97a3e8abd2a6241f22ea10326ad05120ba07494ec"
+  },
+  "owasp-web-A06": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A06_2025-Insecure_Design.md",
+    "sha256": "e2b2f572b43ed5a4a82d2b1207c067687c321ecc683893f6bd4c2d2d467e22e4"
+  },
+  "owasp-web-A07": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A07_2025-Authentication_Failures.md",
+    "sha256": "9f98e0c8f055b0c87b67078ae9af4799a9f8caf0736a3fdcd66b1b092b1c60da"
+  },
+  "owasp-web-A08": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A08_2025-Software_or_Data_Integrity_Failures.md",
+    "sha256": "3739748e2cb72c3935dbab9236ac5cb5061da39a1891362369af0c27102a26ca"
+  },
+  "owasp-web-A09": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A09_2025-Security_Logging_and_Alerting_Failures.md",
+    "sha256": "87121126d307ea09dbf073b090609c861c9ded6dc654f73c5ea6436b9522e9c8"
+  },
+  "owasp-web-A10": {
+    "url": "https://raw.githubusercontent.com/OWASP/Top10/3a31f35346c3f4e90f350395124382fa53af2afe/2025/docs/en/A10_2025-Mishandling_of_Exceptional_Conditions.md",
+    "sha256": "1e05837530582feb3e96d84160cd2286d5ba93348fedca2d8f8fb35eecc27ac4"
+  }
+}

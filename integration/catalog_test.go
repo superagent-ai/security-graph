@@ -62,7 +62,7 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 	if err = cat.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if len(cat.Types) < 15 || len(cat.Frameworks) < 3 || len(cat.Mappings) < 10 {
+	if cat.Version != "2" || len(cat.Types) != 997 || len(cat.Frameworks) != 15 || len(cat.Entries) != 3456 {
 		t.Fatal("catalog missing expected coverage")
 	}
 	failure(t, c.call(t, "get_vulnerability_catalog", map[string]any{"intent": " "}))
@@ -90,6 +90,8 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		return asset, c.record(t, "submit_finding", f)
 	}
 	asset, f := create(c, "payments")
+	_, expanded := create(c, "expanded-catalog")
+	catalogV2Discovery(t, c, expanded.ID)
 	_, private := create(c, "private")
 	args := func(f storage.Record, version int64, ids []string) map[string]any {
 		a := writeArgs()
@@ -108,7 +110,7 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 			Types      []catalog.Type  `json:"vulnerability_types"`
 			Compliance []catalog.Entry `json:"compliance"`
 		}
-		if err := json.Unmarshal(options.Result.Structured, &lists); err != nil || len(lists.Types) != 16 || len(lists.Compliance) < 10 {
+		if err := json.Unmarshal(options.Result.Structured, &lists); err != nil || len(lists.Types) != 25 || len(lists.Compliance) != 25 {
 			t.Fatal("missing selectable lists", err)
 		}
 		tools, err := c.rpc("tools/list", map[string]any{})
@@ -147,11 +149,26 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 			t.Fatal("agent choices not retained")
 		}
 		neighborhood := c.call(t, "get_context", map[string]any{"intent": "Verify selected compliance relationship.", "entity_id": f.ID, "depth": 1, "limit": 100})
-		if !bytes.Contains(neighborhood.Result.Structured, []byte("catalog:v1:entry:owasp-web:A05")) {
+		if !bytes.Contains(neighborhood.Result.Structured, []byte("catalog:v2:entry:owasp-web:A05")) {
 			t.Fatal("missing compliance edge")
 		}
-		reverse := c.call(t, "get_neighbors", map[string]any{"intent": "Verify reverse compliance selection traversal.", "entity_id": "catalog:v1:entry:owasp-web:A05", "limit": 25})
-		if !bytes.Contains(reverse.Result.Structured, []byte(f.ID)) {
+		found, cursor := false, ""
+		for page := 0; page < 100; page++ {
+			reverse := c.call(t, "get_neighbors", map[string]any{"intent": "Verify reverse compliance selection traversal.", "entity_id": "catalog:v2:entry:owasp-web:A05", "limit": 25, "cursor": cursor})
+			var result engine.NeighborsResult
+			if json.Unmarshal(reverse.Result.Structured, &result) != nil || reverse.Result.IsError {
+				t.Fatal("invalid reverse page")
+			}
+			if bytes.Contains(reverse.Result.Structured, []byte(f.ID)) {
+				found = true
+				break
+			}
+			cursor = result.NextCursor
+			if cursor == "" {
+				break
+			}
+		}
+		if !found {
 			t.Fatal("missing reverse selection")
 		}
 		bad := args(f, selected.Version, []string{"command_injection"})

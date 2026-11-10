@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/superagent-ai/security-graph/pkg/catalog"
 	"github.com/superagent-ai/security-graph/pkg/contracts"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
@@ -109,11 +110,10 @@ func (e *Engine) Neighbors(ctx context.Context, p storage.Principal, in Neighbor
 			return out.Edges >= in.Limit, nil
 		}
 		finishPage := func() { raw, _ := json.Marshal(cursor); out.NextCursor = base64.RawURLEncoding.EncodeToString(raw) }
-		// Curated edges have a small immutable inventory. Persisted edges and
+		// Curated edges use an immutable adjacency index. Persisted edges and
 		// classifications use keyset queries; no adjacency list is materialized.
 		if cursor.Phase == 0 {
-			records := currentCatalog().Records()
-			sort.Slice(records, func(i, j int) bool { return records[i].ID < records[j].ID })
+			records := catalog.Adjacent(root.ID)
 			for _, r := range records {
 				if r.Kind != "relationship" || r.ID <= cursor.After {
 					continue
