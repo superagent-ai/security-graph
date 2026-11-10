@@ -95,32 +95,30 @@ context remains available when a finding is reopened, with the current status
 and newer transitions taking precedence. The migration grants the native runtime
 only the additional PR columns and dismissal-cache access it needs.
 
-## Automatic classification
+## Agent-selected vulnerability types and compliance
 
-Set `AUTO_CLASSIFY_FINDINGS=1` with the existing verified local classifier on a
-native Graph deployment. The service consumes durable, leased
-`security_graph.classification_jobs` intents committed with canonical findings.
-It invokes the same classification engine operation used by `classify_finding`,
-retains suggestions and model provenance, and retries temporary failures without
-blocking finding saves. Reviewed manual assignments are preserved. Superseded
-versions are skipped and surviving changed versions are queued again, including
-PR findings whose source version changes at scan completion. Automatic evidence
-excerpts are bounded and marked when truncated. Manual calls retain their
-existing evidence-size guard. The worker never changes verification, triage,
-resolution, reports or GitHub publication. Default/manual-only deployments keep
-automatic processing disabled; setting the flag to `0` retains pending jobs.
+Apply App migration `20261110092754_agent_selected_finding_classification.sql`.
+It retires inference queue triggers, marks outstanding jobs manual, and exposes
+explicit compliance IDs in authorized native context and dashboard pagination.
+Historical model suggestions remain readable; they are not converted into agent
+choices.
 
-Capacity deferrals use the model admission's actual remaining cooldown, or a
-short retry when another request owns the model. They do not consume the job's
-failure-attempt budget or trigger exponential failure backoff. The worker leaves
-work pending while its process's model is occupied; other eligible organizations
-can run when one organization is cooling down. Claims clear previous errors, and
-lease fencing and expired-lease recovery remain in effect. Model failures still
-use exponential backoff. On upgrading an older queue, reschedule legacy pending
-`classifier_capacity` jobs once so old exponential delays are not retained.
+`get_classification_options` returns two selectable lists: `vulnerability_types`
+and `compliance`, with the catalog version, names, descriptions, framework
+releases and reference mappings. `set_finding_classification` takes current
+finding/classification versions, `type_ids`, `compliance_ids`, `rationale`,
+`intent` and `idempotency_key`. Both arrays are required; empty arrays are valid
+when no catalog choice applies. Input schemas enumerate allowed IDs. Invalid or
+duplicate IDs, stale versions, and unauthorized writes are rejected. No inference
+runs. Graph edges record the chosen types and compliance entries independently;
+catalog reference mappings do not silently select compliance entries.
 
-Successful model inference selects one best-matching primary category, using
-Julia's categorical choice interface. Scores and the `best_match_v1` selection
-policy are persisted. The 0.95 threshold marks low-confidence suggestions instead
-of discarding their category. Policy-versioned worker receipts permit existing
-model suggestions to be refreshed without replacing reviewed manual assignments.
+Native agents retrieve the same choices through their scoped MCP bridge and
+include `classification: {type_ids, compliance_ids, rationale}` in each finding
+or PR receipt. The App preserves this metadata through normalization. The Go
+engine validates it and writes the classification atomically with canonical
+finding persistence; it never stores classification fields in canonical advisory
+columns. Existing publishing-peer, verification and history-read guards remain.
+Native publishing paths require explicit selections. Hosted, standalone and
+on-prem deployments use the same agent-selection tools and schemas; there is no
+model runtime or background classification worker.

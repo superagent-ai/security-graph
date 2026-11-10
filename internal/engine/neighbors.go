@@ -176,7 +176,7 @@ func (e *Engine) Neighbors(ctx context.Context, p storage.Principal, in Neighbor
 						return er
 					}
 					if er == nil && finding.Kind == "finding" {
-						ids := append([]string{}, cl.TypeIDs...)
+						ids := classificationTargets(cl)
 						sort.Strings(ids)
 						for _, id := range ids {
 							if cursor.PartialID == r.ID && id <= cursor.TypeAfter {

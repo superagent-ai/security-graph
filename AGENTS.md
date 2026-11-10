@@ -80,8 +80,9 @@ Finding submissions currently use the repository assessment profile. Include the
 3. Retrieve existing context using `get_context` or the finding/report tools.
 4. Start an external assessment with `create_report`. This records a run; it does not launch a Superagent scan.
 5. Submit a structured finding with `submit_finding`. Include the existing policy review, code references, concrete PoC, and proposed patch validation evidence. New submissions are attributed claims with triage status `new`, not independently confirmed vulnerabilities.
-6. Record execution completion using `finish_report`. The engine handles empty/all-resolved reports and unresolved review state.
-7. Use `update_finding_triage` or `update_report_review_status` only with disposition permission and a current `expected_version`.
+6. Read `get_classification_options` and call `set_finding_classification` with agent-selected `type_ids`, `compliance_ids`, rationale, and current versions. Native App tools save the same object atomically. Empty arrays explicitly mean no applicable choice. Hosted deployments do not run Julia inference.
+7. Record execution completion using `finish_report`. The engine handles empty/all-resolved reports and unresolved review state.
+8. Use `update_finding_triage` or `update_report_review_status` only with disposition permission and a current `expected_version`.
 
 Every call includes `intent`, a concrete purpose of 1–500 characters. Writes also require an `idempotency_key`; use the same key and exact payload for retries. The same key with a different payload or permissions returns a conflict. These mutation results and their audit events commit atomically. Only a fingerprint of intent is retained in audit records.
 

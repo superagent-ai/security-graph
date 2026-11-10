@@ -203,8 +203,9 @@ func Run(ctx context.Context, db *postgres.Store, c Config, progress io.Writer) 
 			a["expected_version"] = saved.Version
 			a["expected_classification_version"] = 0
 			a["type_ids"] = []string{typeID}
+			a["compliance_ids"] = []string{}
 			a["rationale"] = "SYNTHETIC DEMO: illustrative catalog assignment, not verified vulnerability or compliance evidence."
-			if _, er = producer.record(workerCtx, "set_finding_types", a); er != nil {
+			if _, er = producer.record(workerCtx, "set_finding_classification", a); er != nil {
 				return er
 			}
 			bucket := (i/c.Reports + index*7) % 10

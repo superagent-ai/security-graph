@@ -101,6 +101,34 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 		if err != nil || len(tools.Tools) < 10 {
 			t.Fatalf("discover tools: %v", err)
 		}
+		exported, err := os.ReadFile("../contracts/mcp-tools.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var contract []map[string]any
+		if err = json.Unmarshal(exported, &contract); err != nil {
+			t.Fatal(err)
+		}
+		if len(contract) != len(tools.Tools) {
+			t.Fatal("stdio registry differs from exported contract")
+		}
+		for _, expected := range contract {
+			found := false
+			for _, tool := range tools.Tools {
+				if tool.Name != expected["name"] {
+					continue
+				}
+				found = true
+				encoded, _ := json.Marshal(tool.InputSchema)
+				var schema any
+				if err := json.Unmarshal(encoded, &schema); err != nil || !reflect.DeepEqual(schema, expected["inputSchema"]) {
+					t.Fatalf("%s schema differs from export", tool.Name)
+				}
+			}
+			if !found {
+				t.Fatalf("missing exported tool %s", expected["name"])
+			}
+		}
 		for _, tool := range tools.Tools {
 			encoded, _ := json.Marshal(tool.InputSchema)
 			var schema struct{ Required []string }
@@ -246,22 +274,6 @@ func TestStdioPostgresWorkflow(t *testing.T) {
 		}
 	})
 	t.Run("invalid startup configuration and native mode fail closed", func(t *testing.T) {
-		for _, timeout := range []string{"invalid", "0", "500ms", "121s"} {
-			cmd := exec.CommandContext(ctx, binary, "stdio")
-			cmd.Env = append(append([]string{}, env...), "CLASSIFIER_COMMAND=python", "CLASSIFIER_TIMEOUT="+timeout)
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-			if output, err := cmd.Output(); err == nil || len(output) != 0 || !strings.Contains(stderr.String(), "CLASSIFIER_TIMEOUT must be") {
-				t.Fatalf("invalid classifier timeout accepted or misdiagnosed: %s", timeout)
-			}
-		}
-		invalidWorker := exec.CommandContext(ctx, binary, "stdio")
-		invalidWorker.Env = append(append([]string{}, env...), "CLASSIFIER_COMMAND=python", "CLASSIFIER_MODE=invalid")
-		var workerError bytes.Buffer
-		invalidWorker.Stderr = &workerError
-		if output, err := invalidWorker.Output(); err == nil || len(output) != 0 || !strings.Contains(workerError.String(), "CLASSIFIER_MODE must be") {
-			t.Fatal("invalid classifier mode accepted")
-		}
 		for _, args := range [][]string{{"--scopes", "admin"}, {"--org", " "}, {"--assets", ","}, {"unexpected-argument"}} {
 			cmd := exec.CommandContext(ctx, binary, append([]string{"stdio"}, args...)...)
 			cmd.Env = env

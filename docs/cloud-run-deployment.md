@@ -1,11 +1,10 @@
-# Cloud Run with native Superagent storage and Julia-1
+# Cloud Run with native Superagent storage
 
-The hosted service uses `Dockerfile.julia`, the App's existing PostgreSQL database,
-and `STORAGE_BACKEND=superagent`. The image includes the manifest-pinned Julia-1
-weights, hash-locked CPU wheels and Python runtime. Inference runs offline in the
-resident worker. Its files are read-only and the image runs as a non-root user.
-The default `Dockerfile` remains the smaller Go-only distribution.
-
+The hosted service uses the Go-only `Dockerfile` and agent-selected vulnerability
+types and compliance mappings. No Julia weights, Python runtime, or inference
+worker are included. Remove retired classifier environment overrides when
+upgrading. Apply the App agent-selection migration
+before enabling the updated App.
 ## Prerequisites
 
 - Apply the native App migration through the App's normal migration process.
@@ -30,55 +29,21 @@ The default `Dockerfile` remains the smaller Go-only distribution.
 
 ## Build, test and deploy
 
-```sh
-make check
-JULIA_PYTHON=/absolute/path/julia-venv/bin/python \
-JULIA_MODEL_DIR=/absolute/path/julia-model REQUIRE_JULIA=1 make integration
+Run `make check` and `make integration` against a disposable PostgreSQL database.
+Use `deploy/gcp/cloudbuild.yaml` to build the Go-only `Dockerfile`; provide an
+immutable `_VERSION` and Artifact Registry `_IMAGE` tag. The image contains the
+binary, CA certificates and the public Supabase CA, with no inference runtime.
 
-docker buildx build --platform linux/amd64 -f Dockerfile.julia \
-  --build-arg VERSION=<release> -t <registry-image>:<release> --load .
-./scripts/container-integration.sh <registry-image>:<release>
-docker push <registry-image>:<release>
+Deploy the resulting image digest to the existing Cloud Run service using its
+existing runtime service account, dedicated database secret and ingress/auth
+settings. Retain `STORAGE_BACKEND=superagent` and remove `AUTO_CLASSIFY_FINDINGS`,
+`CLASSIFIER_COMMAND`, `CLASSIFIER_ARGS`, `CLASSIFIER_MODE`,
+`CLASSIFIER_TIMEOUT`, `CLASSIFICATION_THRESHOLD` and `JULIA_CPU_THREADS` overrides.
+Update any existing test traffic tag to the new revision when moving traffic.
 
-GCP_PROJECT=<project> GCP_REGION=<region> \
-GRAPH_IMAGE=<registry-image>@sha256:<digest> DATABASE_SECRET_VERSION=1 \
-bash scripts/deploy-gcp.sh
-```
-
-The deployment starts with 2 vCPUs, 2 GiB RAM, one warm instance and a maximum
-of two instances. Julia admits one inference per process, without a waiting
-queue; other MCP requests may execute concurrently. Measure production memory
-and latency before increasing replica counts or reducing memory. Request-based
-billing is used; the warm instance incurs idle charges. The earlier Go-only
-512 MiB cost estimate does not apply to this model-enabled deployment.
-
-For automatic native-finding classification, deploy the compatible native MCP
-execution build and apply the App's native execution migration. Set
-`AUTO_CLASSIFY_FINDINGS=1` and use `--no-cpu-throttling` on Cloud Run: the durable
-classification worker runs after the save request has returned and needs CPU
-between requests. Keep one warm instance. This uses instance-based CPU billing;
-manual-only deployments can retain request-based CPU allocation. Julia runs in
-the deployed Graph container, including when its database is reached through a
-local-development tunnel; it does not run on the App developer's computer.
-
-Cloud Run allows requests through its platform IAM layer so the existing App can
-forward MCP without a second authentication protocol. The Go service still
-requires a valid existing Superagent bearer key on every MCP request. Missing,
-invalid and revoked keys are rejected; `/healthz` and `/readyz` are public probes.
-
-## Verification and App routing
-
-Run the App's native integration workflow against **local disposable services**
-with the same engine and actual Julia configured before production cutover.
-See [native integration](superagent-integration.md). The deployed service also
-needs real HTTPS checks: readiness, unauthorized requests, MCP discovery,
-intent enforcement, and classification through the native storage adapter.
-Use explicitly isolated smoke-test records; do not run the integration test
-runner or its schema setup against production.
-
-Set the App's `SECURITY_GRAPH_URL` to the deployed HTTPS `/mcp` endpoint after
-verification. Keep the App's existing `CRON_SECRET` and effect retry schedule.
-Verify the App's public MCP endpoint using an existing organization key. A
-healthy Go endpoint alone does not establish complete hosted App integration.
-Unsetting `SECURITY_GRAPH_URL` rolls App routing back. Keep the previous Cloud
-Run image digest/revision and secret version for service rollback.
+Verify `/readyz`, authenticated `tools/list`, `get_classification_options`, and a
+real `set_finding_classification` save/read/retry before announcing completion.
+The registry should advertise `set_finding_classification` and omit
+`classify_finding` and `set_finding_types`. Test native App saves against its connected local database,
+including invalid-choice rollback, both ID lists in run context, and graph edges.
+No model loading or capacity retry is part of classification.
