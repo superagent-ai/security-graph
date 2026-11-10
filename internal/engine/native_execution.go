@@ -126,8 +126,8 @@ func nativeSelection(input map[string]any) (map[string]any, *ClassificationSelec
 	}
 	value, ok := input["classification"]
 	if !ok {
-		return payload, nil, nil
-	} // Older App releases may omit selections.
+		return nil, nil, contracts.ErrInvalid
+	}
 	var selection ClassificationSelection
 	decoder := json.NewDecoder(bytes.NewReader(data(value)))
 	decoder.DisallowUnknownFields()

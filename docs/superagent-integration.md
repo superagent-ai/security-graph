@@ -119,10 +119,6 @@ or PR receipt. The App preserves this metadata through normalization. The Go
 engine validates it and writes the classification atomically with canonical
 finding persistence; it never stores classification fields in canonical advisory
 columns. Existing publishing-peer, verification and history-read guards remain.
-Older App releases may omit selections for rollout compatibility; the updated
-App requires explicit selections on native publishing paths.
-
-Deploy the Go-only image with `AUTO_CLASSIFY_FINDINGS=0` and no
-`CLASSIFIER_COMMAND`, `CLASSIFIER_ARGS`, or `CLASSIFIER_MODE`. The optional local
-classifier implementation remains available only to explicitly configured
-standalone operators; the hosted registry does not advertise `classify_finding`.
+Native publishing paths require explicit selections. Hosted, standalone and
+on-prem deployments use the same agent-selection tools and schemas; there is no
+model runtime or background classification worker.

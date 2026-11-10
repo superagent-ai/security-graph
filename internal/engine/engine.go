@@ -9,15 +9,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/contracts"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
 type Engine struct {
-	Store                   storage.Store
-	Classifier              classifier.Classifier
-	ClassificationThreshold float64
+	Store storage.Store
 }
 type Call struct {
 	Intent string `json:"intent" jsonschema:"Required: explain the concrete purpose of this call and the security task it supports. 1 to 500 characters; exclude secrets."`

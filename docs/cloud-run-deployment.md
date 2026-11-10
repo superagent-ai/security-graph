@@ -2,8 +2,8 @@
 
 The hosted service uses the Go-only `Dockerfile` and agent-selected vulnerability
 types and compliance mappings. No Julia weights, Python runtime, or inference
-worker are included. Keep `AUTO_CLASSIFY_FINDINGS=0`; remove legacy classifier
-environment overrides when upgrading. Apply the App agent-selection migration
+worker are included. Remove retired classifier environment overrides when
+upgrading. Apply the App agent-selection migration
 before enabling the updated App.
 ## Prerequisites
 
@@ -36,14 +36,14 @@ binary, CA certificates and the public Supabase CA, with no inference runtime.
 
 Deploy the resulting image digest to the existing Cloud Run service using its
 existing runtime service account, dedicated database secret and ingress/auth
-settings. Retain `STORAGE_BACKEND=superagent`, set `AUTO_CLASSIFY_FINDINGS=0`, and
-remove `CLASSIFIER_COMMAND`, `CLASSIFIER_ARGS`, `CLASSIFIER_MODE`,
+settings. Retain `STORAGE_BACKEND=superagent` and remove `AUTO_CLASSIFY_FINDINGS`,
+`CLASSIFIER_COMMAND`, `CLASSIFIER_ARGS`, `CLASSIFIER_MODE`,
 `CLASSIFIER_TIMEOUT`, `CLASSIFICATION_THRESHOLD` and `JULIA_CPU_THREADS` overrides.
 Update any existing test traffic tag to the new revision when moving traffic.
 
 Verify `/readyz`, authenticated `tools/list`, `get_classification_options`, and a
 real `set_finding_classification` save/read/retry before announcing completion.
 The registry should advertise `set_finding_classification` and omit
-`classify_finding`. Test native App saves against its connected local database,
+`classify_finding` and `set_finding_types`. Test native App saves against its connected local database,
 including invalid-choice rollback, both ID lists in run context, and graph edges.
 No model loading or capacity retry is part of classification.

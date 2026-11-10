@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -20,7 +18,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/superagent-ai/security-graph/internal/engine"
 	"github.com/superagent-ai/security-graph/internal/server"
-	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/postgres"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 	"github.com/superagent-ai/security-graph/pkg/superagent"
@@ -82,41 +79,6 @@ func run() error {
 		}
 	}
 	eng := &engine.Engine{Store: store}
-	if os.Args[1] == "serve" || os.Args[1] == "stdio" {
-		if command := os.Getenv("CLASSIFIER_COMMAND"); command != "" {
-			var args []string
-			if raw := os.Getenv("CLASSIFIER_ARGS"); raw != "" {
-				if json.Unmarshal([]byte(raw), &args) != nil {
-					return fmt.Errorf("CLASSIFIER_ARGS must be a JSON string array")
-				}
-			}
-			timeout := classifier.DefaultTimeout
-			if raw := os.Getenv("CLASSIFIER_TIMEOUT"); raw != "" {
-				timeout, err = time.ParseDuration(raw)
-				if err != nil || timeout < time.Second || timeout > classifier.MaxTimeout {
-					return fmt.Errorf("CLASSIFIER_TIMEOUT must be a duration between 1s and 2m")
-				}
-			}
-			configured := classifier.Command{Path: command, Args: args, Timeout: timeout}
-			switch os.Getenv("CLASSIFIER_MODE") {
-			case "", "command":
-				eng.Classifier = configured
-			case "worker":
-				worker := classifier.NewWorker(ctx, configured)
-				defer worker.Close()
-				eng.Classifier = worker
-			default:
-				return fmt.Errorf("CLASSIFIER_MODE must be command or worker")
-			}
-		}
-		if raw := os.Getenv("CLASSIFICATION_THRESHOLD"); raw != "" {
-			value, err := strconv.ParseFloat(raw, 64)
-			if err != nil || !(value > 0 && value <= 1) {
-				return fmt.Errorf("CLASSIFICATION_THRESHOLD must be in (0,1]")
-			}
-			eng.ClassificationThreshold = value
-		}
-	}
 	switch os.Args[1] {
 	case "stdio":
 		err := server.NewMCP(eng, local, version).Run(ctx, &mcp.StdioTransport{MaxLineLength: 1 << 20})
@@ -171,23 +133,6 @@ func run() error {
 		}
 		return err
 	case "serve":
-		if os.Getenv("AUTO_CLASSIFY_FINDINGS") == "1" {
-			if backend != "superagent" || eng.Classifier == nil {
-				return fmt.Errorf("AUTO_CLASSIFY_FINDINGS requires native Superagent storage and a configured classifier")
-			}
-			var queueReady bool
-			if err = store.Pool.QueryRow(ctx, "SELECT CASE WHEN to_regclass('security_graph.classification_jobs') IS NOT NULL THEN has_table_privilege(current_user,'security_graph.classification_jobs','SELECT') AND has_table_privilege(current_user,'security_graph.classification_jobs','INSERT') AND has_table_privilege(current_user,'security_graph.classification_jobs','UPDATE') ELSE false END").Scan(&queueReady); err != nil || !queueReady {
-				return fmt.Errorf("apply the native MCP execution App migration and runtime grants before enabling automatic classification")
-			}
-			workerCtx, stopWorker := context.WithCancel(ctx)
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				eng.RunClassificationWorker(workerCtx, superagent.ClassificationQueue{Store: store})
-			}()
-			defer func() { stopWorker(); <-done }()
-		}
-
 		addr := os.Getenv("LISTEN_ADDR")
 		if addr == "" {
 			addr = "127.0.0.1:8080"

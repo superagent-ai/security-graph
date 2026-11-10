@@ -136,4 +136,4 @@ mappings to CWE, OWASP, MITRE ATLAS and AIUC-1. Agents call
 evidence-based rationale. Native App saves carry the same `classification` object
 atomically. Empty lists explicitly record that no catalog choice applies. The
 hosted service does not run Julia or automatic classification.
-See [catalog, graph relationships and local classifier setup](docs/vulnerability-catalog.md).
+See [catalog choices and graph relationships](docs/vulnerability-catalog.md).

@@ -143,8 +143,9 @@ func TestMCPContextAttributionAndPaging(t *testing.T) {
 		assign["expected_version"] = current.Version
 		assign["expected_classification_version"] = 0
 		assign["type_ids"] = []string{"missing_authorization", "idor"}
+		assign["compliance_ids"] = []string{}
 		assign["rationale"] = "Classify the real tenant-isolation integration finding."
-		writer.record(t, "set_finding_types", assign)
+		writer.record(t, "set_finding_classification", assign)
 		cursor = ""
 		types := map[string]bool{}
 		for i := 0; i < 10; i++ {

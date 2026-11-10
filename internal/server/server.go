@@ -16,7 +16,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/superagent-ai/security-graph/internal/engine"
 	"github.com/superagent-ai/security-graph/pkg/catalog"
-	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/contracts"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
@@ -59,7 +58,7 @@ func Handler(e *engine.Engine, auth Authenticator, version string) http.Handler 
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), classifier.MaxTimeout+15*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 		defer cancel()
 		authCtx, authCancel := context.WithTimeout(ctx, 30*time.Second)
 		p, err := auth.Authenticate(authCtx, parts[1])
@@ -78,7 +77,7 @@ func safeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, known := range []error{contracts.ErrInvalid, contracts.ErrNativeContextReadRequired, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden, classifier.ErrUnavailable, classifier.ErrTimeout, classifier.ErrOutput, engine.ErrClassifierCapacity} {
+	for _, known := range []error{contracts.ErrInvalid, contracts.ErrNativeContextReadRequired, storage.ErrNotFound, storage.ErrConflict, storage.ErrForbidden} {
 		if errors.Is(err, known) {
 			return err
 		}
@@ -111,17 +110,16 @@ func add[I any, O any](s *mcp.Server, name, description string, readOnly bool, h
 			for _, entry := range c.Entries {
 				schema.Properties["compliance_ids"].Items.Enum = append(schema.Properties["compliance_ids"].Items.Enum, entry.ID)
 			}
-			schema.Properties["type_ids"].UniqueItems = true
-			schema.Properties["compliance_ids"].UniqueItems = true
+			for _, name := range []string{"type_ids", "compliance_ids"} {
+				list := schema.Properties[name]
+				list.Type, list.Types = "array", nil
+				list.UniqueItems = true
+			}
 		}
 		cached, _ = inputSchemas.LoadOrStore(typ, schema)
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: name, Description: description, InputSchema: cached, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: readOnly, IdempotentHint: !readOnly, OpenWorldHint: &f}}, func(ctx context.Context, req *mcp.CallToolRequest, in I) (*mcp.CallToolResult, any, error) {
 		timeout := 30 * time.Second
-		if name == "classify_finding" {
-			// Leave time to persist the result after bounded cold CPU inference.
-			timeout = classifier.MaxTimeout + 10*time.Second
-		}
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		out, err := handler(ctx, in)
@@ -225,13 +223,9 @@ func NewMCP(e *engine.Engine, p storage.Principal, version string) *mcp.Server {
 		return e.SetFindingClassification(ctx, p, in)
 	})
 	add(s, "get_vulnerability_catalog", "Read the immutable vulnerability types, hierarchy, framework releases and sourced mappings. Catalog IDs cannot be created by agents.", true, func(ctx context.Context, in engine.Call) (any, error) { return e.Catalog(p, in.Intent) })
-	add(s, "get_finding_classification", "Read the current authorized finding classification and its version, model scores and provenance.", true, func(ctx context.Context, in GetInput) (storage.Record, error) {
+	add(s, "get_finding_classification", "Read the current authorized finding classification and its version, selected vulnerability types, compliance entries and rationale.", true, func(ctx context.Context, in GetInput) (storage.Record, error) {
 		return e.GetClassification(ctx, p, in.Intent, in.FindingID)
 	})
-	add(s, "set_finding_types", "Assign existing catalog types with rationale, or an empty list for unclassified. Requires read and graph:write; current finding and classification versions. Does not confirm a vulnerability.", false, func(ctx context.Context, in engine.SetTypesInput) (any, error) { return e.SetFindingTypes(ctx, p, in) })
-	if e != nil && e.Classifier != nil {
-		add(s, "classify_finding", "Run the configured local decision model and persist suggested catalog types, raw scores and model revision. Requires read and graph:write; current finding and classification versions. Scores are not calibrated verification or compliance decisions. Capacity is bounded; retry capacity errors with the same key and payload after 60 seconds.", false, func(ctx context.Context, in engine.ClassifyInput) (any, error) { return e.ClassifyFinding(ctx, p, in) })
-	}
 
 	add(s, "get_context", "Retrieve an authorized graph neighborhood. Depth 0 to 3, limit 1 to 100; returns provenance and truncation.", true, func(ctx context.Context, in ContextInput) (engine.ContextResult, error) {
 		return e.Context(ctx, p, in.Intent, in.EntityID, in.Depth, in.Limit)

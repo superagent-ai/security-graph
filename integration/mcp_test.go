@@ -32,7 +32,10 @@ type rpcResult struct {
 		Tools      []struct {
 			Name        string `json:"name"`
 			InputSchema struct {
-				Required []string `json:"required"`
+				Required   []string `json:"required"`
+				Properties map[string]struct {
+					Type json.RawMessage `json:"type"`
+				} `json:"properties"`
 			} `json:"inputSchema"`
 		} `json:"tools"`
 	} `json:"result"`
@@ -78,9 +81,6 @@ func (c client) rpcVersion(ctx context.Context, method string, params any, proto
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	timeout := 35 * time.Second
-	if call, ok := params.(map[string]any); method == "tools/call" && ok && call["name"] == "classify_finding" {
-		timeout = 140 * time.Second
-	}
 	res, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
 		return rpcResult{}, err

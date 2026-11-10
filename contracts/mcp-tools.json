@@ -370,7 +370,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Read the current authorized finding classification and its version, model scores and provenance.",
+    "description": "Read the current authorized finding classification and its version, selected vulnerability types, compliance entries and rationale.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -770,10 +770,7 @@
             ],
             "type": "string"
           },
-          "type": [
-            "null",
-            "array"
-          ],
+          "type": "array",
           "uniqueItems": true
         },
         "expected_classification_version": {
@@ -825,10 +822,7 @@
             ],
             "type": "string"
           },
-          "type": [
-            "null",
-            "array"
-          ],
+          "type": "array",
           "uniqueItems": true
         }
       },
@@ -845,65 +839,6 @@
       "type": "object"
     },
     "name": "set_finding_classification"
-  },
-  {
-    "annotations": {
-      "idempotentHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": false
-    },
-    "description": "Assign existing catalog types with rationale, or an empty list for unclassified. Requires read and graph:write; current finding and classification versions. Does not confirm a vulnerability.",
-    "inputSchema": {
-      "additionalProperties": false,
-      "properties": {
-        "expected_classification_version": {
-          "description": "0 for first classification; otherwise the current classification record version.",
-          "type": "integer"
-        },
-        "expected_version": {
-          "description": "Current finding version; classification does not change it.",
-          "type": "integer"
-        },
-        "finding_id": {
-          "type": "string"
-        },
-        "idempotency_key": {
-          "description": "Stable key for retrying exactly this mutation.",
-          "type": "string"
-        },
-        "intent": {
-          "description": "Required purpose of this action; 1 to 500 nonblank characters. Never include secrets.",
-          "maxLength": 500,
-          "minLength": 1,
-          "pattern": "\\S",
-          "type": "string"
-        },
-        "rationale": {
-          "type": "string"
-        },
-        "type_ids": {
-          "description": "Existing classifiable catalog IDs. Empty records an unclassified finding.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "null",
-            "array"
-          ]
-        }
-      },
-      "required": [
-        "intent",
-        "idempotency_key",
-        "finding_id",
-        "expected_version",
-        "expected_classification_version",
-        "type_ids",
-        "rationale"
-      ],
-      "type": "object"
-    },
-    "name": "set_finding_types"
   },
   {
     "annotations": {

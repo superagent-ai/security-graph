@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/superagent-ai/security-graph/pkg/catalog"
-	"github.com/superagent-ai/security-graph/pkg/classifier"
 	"github.com/superagent-ai/security-graph/pkg/contracts"
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
@@ -48,16 +46,11 @@ func (e *Engine) ClassificationOptions(p storage.Principal, intent string) (any,
 	return map[string]any{"catalog_version": c.Version, "vulnerability_types": types, "compliance": c.Entries, "frameworks": c.Frameworks, "mappings": c.Mappings}, nil
 }
 
-type ClassifyInput struct {
+type ClassificationVersionInput struct {
 	WriteCall
 	FindingID                     string `json:"finding_id"`
 	ExpectedVersion               int64  `json:"expected_version" jsonschema:"Current finding version; classification does not change it."`
 	ExpectedClassificationVersion int64  `json:"expected_classification_version" jsonschema:"0 for first classification; otherwise the current classification record version."`
-}
-type SetTypesInput struct {
-	ClassifyInput
-	TypeIDs   []string `json:"type_ids" jsonschema:"Existing classifiable catalog IDs. Empty records an unclassified finding."`
-	Rationale string   `json:"rationale"`
 }
 type ClassificationSelection struct {
 	TypeIDs       []string `json:"type_ids" jsonschema:"Select zero or more vulnerability type IDs from get_classification_options. Never invent IDs."`
@@ -65,28 +58,21 @@ type ClassificationSelection struct {
 	Rationale     string   `json:"rationale" jsonschema:"Explain how the evidence supports these selections, or why no catalog choice applies."`
 }
 type SetClassificationInput struct {
-	ClassifyInput
+	ClassificationVersionInput
 	ClassificationSelection
 }
 type Classification struct {
-	SourceID          string             `json:"source_id"`
-	FindingVersion    int64              `json:"finding_version"`
-	CatalogVersion    string             `json:"catalog_version"`
-	TypeIDs           []string           `json:"type_ids"`
-	ComplianceIDs     []string           `json:"compliance_ids"`
-	TargetIDs         []string           `json:"target_ids"`
-	Method            string             `json:"method"`
-	Status            string             `json:"status"`
-	Rationale         string             `json:"rationale,omitempty"`
-	Model             *classifier.Result `json:"model,omitempty"`
-	EvidenceTruncated bool               `json:"evidence_truncated,omitempty"`
-	Threshold         float64            `json:"threshold,omitempty"`
-	SelectionPolicy   string             `json:"selection_policy,omitempty"`
-	Confidence        float64            `json:"confidence,omitempty"`
-	BelowThreshold    bool               `json:"below_threshold,omitempty"`
+	SourceID        string   `json:"source_id"`
+	FindingVersion  int64    `json:"finding_version"`
+	CatalogVersion  string   `json:"catalog_version"`
+	TypeIDs         []string `json:"type_ids"`
+	ComplianceIDs   []string `json:"compliance_ids"`
+	TargetIDs       []string `json:"target_ids"`
+	Method          string   `json:"method"`
+	Status          string   `json:"status"`
+	Rationale       string   `json:"rationale,omitempty"`
+	SelectionPolicy string   `json:"selection_policy,omitempty"`
 }
-
-const PrimaryTypeSelectionPolicy = "best_match_v1"
 
 func classificationID(org, finding string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("classification\x00"+org+"\x00"+finding)).String()
@@ -107,9 +93,6 @@ func validateTypes(c catalog.Catalog, ids []string) error {
 		seen[id] = true
 	}
 	return nil
-}
-func (e *Engine) SetFindingTypes(ctx context.Context, p storage.Principal, in SetTypesInput) (json.RawMessage, error) {
-	return e.setFindingClassification(ctx, p, "set_finding_types", in, SetClassificationInput{ClassifyInput: in.ClassifyInput, ClassificationSelection: ClassificationSelection{TypeIDs: in.TypeIDs, ComplianceIDs: []string{}, Rationale: in.Rationale}})
 }
 func validateSelection(c catalog.Catalog, selection ClassificationSelection) error {
 	if selection.TypeIDs == nil || selection.ComplianceIDs == nil || strings.TrimSpace(selection.Rationale) == "" || len(selection.Rationale) > 2000 {
@@ -132,16 +115,13 @@ func validateSelection(c catalog.Catalog, selection ClassificationSelection) err
 	return nil
 }
 func (e *Engine) SetFindingClassification(ctx context.Context, p storage.Principal, in SetClassificationInput) (json.RawMessage, error) {
-	return e.setFindingClassification(ctx, p, "set_finding_classification", in, in)
-}
-func (e *Engine) setFindingClassification(ctx context.Context, p storage.Principal, operation string, payload any, in SetClassificationInput) (json.RawMessage, error) {
 	if err := authorize(p, in.Intent, "read"); err != nil {
 		return nil, err
 	}
 	if err := validateSelection(currentCatalog(), in.ClassificationSelection); err != nil {
 		return nil, err
 	}
-	return e.write(ctx, p, operation, "graph:write", in.WriteCall, payload, func(tx storage.Transaction) (any, error) {
+	return e.write(ctx, p, "set_finding_classification", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
 		f, err := tx.Get(ctx, in.FindingID)
 		if err != nil {
 			return nil, err
@@ -175,152 +155,11 @@ func saveClassification(ctx context.Context, tx storage.Transaction, p storage.P
 		c.TargetIDs = append(c.TargetIDs, "catalog:v"+c.CatalogVersion+":entry:"+id)
 	}
 	c.Status = "classified"
-	if c.Method == "model_suggested" {
-		c.Status = "suggested"
-	}
 	if len(c.TypeIDs) == 0 && len(c.ComplianceIDs) == 0 {
 		c.Status = "unclassified"
 	}
 	return tx.Put(ctx, storage.Record{ID: classificationID(p.OrganizationID, f.ID), Kind: "classification", AssetID: f.AssetID, ReportID: f.ReportID, Data: data(c)}, expected)
 }
-func (e *Engine) ClassifyFinding(ctx context.Context, p storage.Principal, in ClassifyInput) (json.RawMessage, error) {
-	if err := authorize(p, in.Intent, "read"); err != nil {
-		return nil, err
-	}
-	// Inference runs lazily after the idempotency receipt lookup, but outside any
-	// database transaction. Replay therefore works even if the model is offline.
-	var infer bool
-	var f storage.Record
-	result, err := e.write(ctx, p, "classify_finding", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
-		var err error
-		f, err = tx.Get(ctx, in.FindingID)
-		if err != nil {
-			return nil, err
-		}
-		if f.Kind != "finding" {
-			return nil, storage.ErrNotFound
-		}
-		if in.ExpectedVersion < 1 || in.ExpectedClassificationVersion < 0 {
-			return nil, fmt.Errorf("%w: invalid expected versions", contracts.ErrInvalid)
-		}
-		if f.Version != in.ExpectedVersion {
-			return nil, storage.ErrConflict
-		}
-		old, err := tx.Get(ctx, classificationID(p.OrganizationID, f.ID))
-		if err == nil {
-			if old.Kind != "classification" || old.Version != in.ExpectedClassificationVersion {
-				return nil, storage.ErrConflict
-			}
-		} else if err != storage.ErrNotFound {
-			return nil, err
-		} else if in.ExpectedClassificationVersion != 0 {
-			return nil, storage.ErrConflict
-		}
-		infer = true
-		return nil, errInferenceRequired
-	})
-	if !infer || err != errInferenceRequired {
-		return result, err
-	}
-	if e.Classifier == nil {
-		return nil, classifier.ErrUnavailable
-	}
-	var finding contracts.Finding
-	if err = json.Unmarshal(f.Data, &finding); err != nil {
-		return nil, err
-	}
-	// Supply authored evidence, not intent, credentials, or a claimed CWE label.
-	evidenceTruncated := false
-	var native struct {
-		Evidence json.RawMessage `json:"evidence"`
-	}
-	_ = json.Unmarshal(f.Data, &native)
-	nativeEvidence := ""
-	if len(native.Evidence) > 0 && string(native.Evidence) != "null" {
-		nativeEvidence = string(native.Evidence)
-	}
-	if len(finding.Triage.Evidence) > 0 && string(finding.Triage.Evidence) != "null" {
-		nativeEvidence += string(finding.Triage.Evidence)
-	}
-	// Automated suggestions use bounded excerpts of large native reports. Manual
-	// MCP calls retain their explicit 16-KiB input guard.
-	if p.ActorID == "system:security-graph-classifier" {
-		clip := func(value string, max int) string {
-			if len(value) <= max {
-				return value
-			}
-			evidenceTruncated = true
-			return strings.ToValidUTF8(value[:max], "")
-		}
-		nativeEvidence = clip(nativeEvidence, 2000)
-		finding.Title = clip(finding.Title, 1000)
-		finding.Description = clip(finding.Description, 5000)
-		finding.Submission.Summary = clip(finding.Submission.Summary, 1000)
-		finding.Submission.Details = clip(finding.Submission.Details, 2000)
-		finding.Submission.Impact = clip(finding.Submission.Impact, 1000)
-		finding.Submission.Proof = clip(finding.Submission.Proof, 2000)
-		if len(finding.Submission.CodeReferences) > 4 {
-			finding.Submission.CodeReferences = finding.Submission.CodeReferences[:4]
-			evidenceTruncated = true
-		}
-		for i := range finding.Submission.CodeReferences {
-			finding.Submission.CodeReferences[i].Excerpt = clip(finding.Submission.CodeReferences[i].Excerpt, 500)
-			finding.Submission.CodeReferences[i].Reason = clip(finding.Submission.CodeReferences[i].Reason, 250)
-		}
-	}
-
-	state := data(struct {
-		Title, Description, Summary, Details, Impact, Proof, NativeEvidence string
-		References                                                          []contracts.CodeReference
-	}{finding.Title, finding.Description, finding.Submission.Summary, finding.Submission.Details, finding.Submission.Impact, finding.Submission.Proof, nativeEvidence, finding.Submission.CodeReferences})
-	if len(state) > 16384 {
-		return nil, fmt.Errorf("%w: classifier evidence exceeds 16 KiB", contracts.ErrInvalid)
-	}
-	c := currentCatalog()
-	req := classifier.Request{State: state, Candidates: []catalog.Type{}}
-	for _, t := range c.Types {
-		if t.Classifiable && !t.Deprecated {
-			req.Candidates = append(req.Candidates, t)
-		}
-	}
-	decision, err := e.classifyLocally(ctx, p, req)
-	if err != nil {
-		return nil, err
-	}
-	if err = classifier.Validate(req, decision); err != nil {
-		return nil, err
-	}
-	threshold := e.ClassificationThreshold
-	if threshold == 0 {
-		threshold = 0.95
-	}
-	if math.IsNaN(threshold) || threshold <= 0 || threshold > 1 {
-		return nil, fmt.Errorf("invalid classifier threshold")
-	}
-	bestID, bestScore := "", -1.0
-	for id, score := range decision.Scores {
-		if score > bestScore || (score == bestScore && (bestID == "" || id < bestID)) {
-			bestID, bestScore = id, score
-		}
-	}
-	if bestID == "" {
-		return nil, classifier.ErrOutput
-	}
-	ids := []string{bestID}
-	return e.write(ctx, p, "classify_finding", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
-		latest, err := tx.Get(ctx, in.FindingID)
-		if err != nil {
-			return nil, err
-		}
-		if latest.Kind != "finding" || latest.Version != f.Version {
-			return nil, storage.ErrConflict
-		}
-		return saveClassification(ctx, tx, p, latest, in.ExpectedClassificationVersion, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: c.Version, TypeIDs: ids, Method: "model_suggested", Model: &decision, Threshold: threshold, EvidenceTruncated: evidenceTruncated, SelectionPolicy: PrimaryTypeSelectionPolicy, Confidence: bestScore, BelowThreshold: bestScore < threshold})
-	})
-}
-
-var errInferenceRequired = fmt.Errorf("inference_required")
-
 func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record, error) {
 	// Asset IDs were unrestricted before catalogs existed. Never reinterpret an
 	// authorized legacy record as a public definition or a projected edge.
@@ -393,9 +232,6 @@ func classificationEdge(r storage.Record, cl Classification, id string) storage.
 	edgeType := "instance_of"
 	if strings.HasPrefix(id, "entry/") {
 		edgeType = "mapped_to"
-	}
-	if cl.Method == "model_suggested" {
-		edgeType = "suggested_instance_of"
 	}
 	return storage.Record{ID: "classification-edge:" + r.ID + ":" + id, Kind: "relationship", AssetID: r.AssetID, ReportID: r.ReportID, Version: r.Version, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 		Data: data(contracts.Relationship{SourceID: cl.SourceID, Type: edgeType, TargetID: classificationTarget(cl, id), Provenance: cl.Method + "; classification=" + r.ID})}
