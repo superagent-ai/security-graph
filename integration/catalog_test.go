@@ -106,6 +106,57 @@ func TestCatalogClassificationWorkflow(t *testing.T) {
 		a["rationale"] = "The fixture omits authorization before reading a tenant record."
 		return a
 	}
+	t.Run("agent selects both catalog lists without a classifier", func(t *testing.T) {
+		_, f := create(c, "agent-selected")
+		options := c.call(t, "get_classification_options", map[string]any{"intent": "Choose explicit evidence-backed category and compliance IDs."})
+		var lists struct {
+			Types      []catalog.Type  `json:"vulnerability_types"`
+			Compliance []catalog.Entry `json:"compliance"`
+		}
+		if err := json.Unmarshal(options.Result.Structured, &lists); err != nil || len(lists.Types) != 16 || len(lists.Compliance) < 10 {
+			t.Fatal("missing selectable lists", err)
+		}
+		tools, err := c.rpc("tools/list", map[string]any{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tool := range tools.Result.Tools {
+			if tool.Name == "classify_finding" {
+				t.Fatal("unconfigured inference tool exposed")
+			}
+		}
+		a := args(f, 0, []string{"command_injection"})
+		a["compliance_ids"] = []string{"owasp-web:A05"}
+		selected := c.record(t, "set_finding_classification", a)
+		replay := c.record(t, "set_finding_classification", a)
+		if !bytes.Equal(selected.Data, replay.Data) {
+			t.Fatal("selection replay changed")
+		}
+		var cl engine.Classification
+		if json.Unmarshal(selected.Data, &cl) != nil || cl.Method != "agent_asserted" || cl.Model != nil || len(cl.ComplianceIDs) != 1 || cl.ComplianceIDs[0] != "owasp-web:A05" {
+			t.Fatal("agent choices not retained")
+		}
+		neighborhood := c.call(t, "get_context", map[string]any{"intent": "Verify selected compliance relationship.", "entity_id": f.ID, "depth": 1, "limit": 100})
+		if !bytes.Contains(neighborhood.Result.Structured, []byte("catalog:v1:entry:owasp-web:A05")) {
+			t.Fatal("missing compliance edge")
+		}
+		reverse := c.call(t, "get_neighbors", map[string]any{"intent": "Verify reverse compliance selection traversal.", "entity_id": "catalog:v1:entry:owasp-web:A05", "limit": 25})
+		if !bytes.Contains(reverse.Result.Structured, []byte(f.ID)) {
+			t.Fatal("missing reverse selection")
+		}
+		bad := args(f, selected.Version, []string{"command_injection"})
+		bad["compliance_ids"] = []string{"invented"}
+		failure(t, c.call(t, "set_finding_classification", bad))
+		stale := args(f, 0, []string{"command_injection"})
+		stale["compliance_ids"] = []string{}
+		failure(t, c.call(t, "set_finding_classification", stale))
+		empty := args(f, selected.Version, []string{})
+		empty["compliance_ids"] = []string{}
+		cleared := c.record(t, "set_finding_classification", empty)
+		if !bytes.Contains(cleared.Data, []byte(`"status":"unclassified"`)) {
+			t.Fatal("empty choice must remain unclassified")
+		}
+	})
 	for _, ids := range [][]string{{"invented_type"}, {"injection"}, {"missing_authorization", "missing_authorization"}} {
 		failure(t, c.call(t, "set_finding_types", args(f, 0, ids)))
 	}

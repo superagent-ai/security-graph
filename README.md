@@ -118,7 +118,7 @@ Customize the volume with `./scripts/seed-demo.sh --findings 10000 --assets 200 
 
 **Native Superagent:** Run the service against the existing App database and configure App to forward MCP calls to it. Agents use their existing Superagent API keys; organization access comes from the key. This requires the App migration and service configuration described in the [native integration guide](docs/superagent-integration.md).
 
-For a native deployment on Google Cloud Run with the offline Julia-1 classifier, see the [Cloud Run deployment guide](docs/cloud-run-deployment.md).
+For a native deployment on Google Cloud Run with agent-selected vulnerability types and compliance mappings, see the [Cloud Run deployment guide](docs/cloud-run-deployment.md).
 
 ## More
 
@@ -130,6 +130,10 @@ For a native deployment on Google Cloud Run with the offline Julia-1 classifier,
 ### Vulnerability classifications
 
 The engine includes a curated, versioned vulnerability catalog and sourced
-mappings to CWE, OWASP, MITRE ATLAS and AIUC-1. Agents can discover the catalog,
-assign existing types, and optionally run Julia-1 locally for model suggestions.
+mappings to CWE, OWASP, MITRE ATLAS and AIUC-1. Agents call
+`get_classification_options`, choose IDs from its `vulnerability_types` and
+`compliance` lists, then call `set_finding_classification` with both lists and an
+evidence-based rationale. Native App saves carry the same `classification` object
+atomically. Empty lists explicitly record that no catalog choice applies. The
+hosted service does not run Julia or automatic classification.
 See [catalog, graph relationships and local classifier setup](docs/vulnerability-catalog.md).

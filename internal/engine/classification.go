@@ -34,6 +34,20 @@ func (e *Engine) Catalog(p storage.Principal, intent string) (catalog.Catalog, e
 	return catalog.Load()
 }
 
+func (e *Engine) ClassificationOptions(p storage.Principal, intent string) (any, error) {
+	if err := authorize(p, intent, "read"); err != nil {
+		return nil, err
+	}
+	c := currentCatalog()
+	types := []catalog.Type{}
+	for _, t := range c.Types {
+		if t.Classifiable && !t.Deprecated {
+			types = append(types, t)
+		}
+	}
+	return map[string]any{"catalog_version": c.Version, "vulnerability_types": types, "compliance": c.Entries, "frameworks": c.Frameworks, "mappings": c.Mappings}, nil
+}
+
 type ClassifyInput struct {
 	WriteCall
 	FindingID                     string `json:"finding_id"`
@@ -45,11 +59,21 @@ type SetTypesInput struct {
 	TypeIDs   []string `json:"type_ids" jsonschema:"Existing classifiable catalog IDs. Empty records an unclassified finding."`
 	Rationale string   `json:"rationale"`
 }
+type ClassificationSelection struct {
+	TypeIDs       []string `json:"type_ids" jsonschema:"Select zero or more vulnerability type IDs from get_classification_options. Never invent IDs."`
+	ComplianceIDs []string `json:"compliance_ids" jsonschema:"Select zero or more compliance/framework entry IDs from get_classification_options. Empty means no applicable mapping; mappings are not proof of compliance."`
+	Rationale     string   `json:"rationale" jsonschema:"Explain how the evidence supports these selections, or why no catalog choice applies."`
+}
+type SetClassificationInput struct {
+	ClassifyInput
+	ClassificationSelection
+}
 type Classification struct {
 	SourceID          string             `json:"source_id"`
 	FindingVersion    int64              `json:"finding_version"`
 	CatalogVersion    string             `json:"catalog_version"`
 	TypeIDs           []string           `json:"type_ids"`
+	ComplianceIDs     []string           `json:"compliance_ids"`
 	TargetIDs         []string           `json:"target_ids"`
 	Method            string             `json:"method"`
 	Status            string             `json:"status"`
@@ -85,19 +109,39 @@ func validateTypes(c catalog.Catalog, ids []string) error {
 	return nil
 }
 func (e *Engine) SetFindingTypes(ctx context.Context, p storage.Principal, in SetTypesInput) (json.RawMessage, error) {
+	return e.setFindingClassification(ctx, p, "set_finding_types", in, SetClassificationInput{ClassifyInput: in.ClassifyInput, ClassificationSelection: ClassificationSelection{TypeIDs: in.TypeIDs, ComplianceIDs: []string{}, Rationale: in.Rationale}})
+}
+func validateSelection(c catalog.Catalog, selection ClassificationSelection) error {
+	if selection.TypeIDs == nil || selection.ComplianceIDs == nil || strings.TrimSpace(selection.Rationale) == "" || len(selection.Rationale) > 2000 {
+		return fmt.Errorf("%w: select both lists and supply rationale (1–2000 bytes)", contracts.ErrInvalid)
+	}
+	if err := validateTypes(c, selection.TypeIDs); err != nil {
+		return err
+	}
+	allowed := map[string]bool{}
+	for _, entry := range c.Entries {
+		allowed[entry.ID] = true
+	}
+	seen := map[string]bool{}
+	for _, id := range selection.ComplianceIDs {
+		if !allowed[id] || seen[id] {
+			return fmt.Errorf("%w: unknown or duplicate compliance entry", contracts.ErrInvalid)
+		}
+		seen[id] = true
+	}
+	return nil
+}
+func (e *Engine) SetFindingClassification(ctx context.Context, p storage.Principal, in SetClassificationInput) (json.RawMessage, error) {
+	return e.setFindingClassification(ctx, p, "set_finding_classification", in, in)
+}
+func (e *Engine) setFindingClassification(ctx context.Context, p storage.Principal, operation string, payload any, in SetClassificationInput) (json.RawMessage, error) {
 	if err := authorize(p, in.Intent, "read"); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(in.Rationale) == "" || len(in.Rationale) > 2000 {
-		return nil, fmt.Errorf("%w: rationale requires 1 to 2000 bytes", contracts.ErrInvalid)
-	}
-	c := currentCatalog()
-	if err := validateTypes(c, in.TypeIDs); err != nil {
+	if err := validateSelection(currentCatalog(), in.ClassificationSelection); err != nil {
 		return nil, err
 	}
-	ids := append([]string{}, in.TypeIDs...)
-	sort.Strings(ids)
-	return e.write(ctx, p, "set_finding_types", "graph:write", in.WriteCall, in, func(tx storage.Transaction) (any, error) {
+	return e.write(ctx, p, operation, "graph:write", in.WriteCall, payload, func(tx storage.Transaction) (any, error) {
 		f, err := tx.Get(ctx, in.FindingID)
 		if err != nil {
 			return nil, err
@@ -108,9 +152,17 @@ func (e *Engine) SetFindingTypes(ctx context.Context, p storage.Principal, in Se
 		if f.Version != in.ExpectedVersion {
 			return nil, storage.ErrConflict
 		}
-		return saveClassification(ctx, tx, p, f, in.ExpectedClassificationVersion, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: c.Version, TypeIDs: ids, Method: "agent_asserted", Rationale: in.Rationale})
+		return saveAgentClassification(ctx, tx, p, f, in.ExpectedClassificationVersion, in.ClassificationSelection)
 	})
 }
+func saveAgentClassification(ctx context.Context, tx storage.Transaction, p storage.Principal, f storage.Record, expected int64, selection ClassificationSelection) (storage.Record, error) {
+	ids := append([]string{}, selection.TypeIDs...)
+	sort.Strings(ids)
+	entries := append([]string{}, selection.ComplianceIDs...)
+	sort.Strings(entries)
+	return saveClassification(ctx, tx, p, f, expected, Classification{SourceID: f.ID, FindingVersion: f.Version, CatalogVersion: currentCatalog().Version, TypeIDs: ids, ComplianceIDs: entries, Method: "agent_asserted", SelectionPolicy: "agent_selected_v1", Rationale: selection.Rationale})
+}
+
 func saveClassification(ctx context.Context, tx storage.Transaction, p storage.Principal, f storage.Record, expected int64, c Classification) (storage.Record, error) {
 	if expected < 0 {
 		return storage.Record{}, fmt.Errorf("%w: negative classification version", contracts.ErrInvalid)
@@ -119,11 +171,14 @@ func saveClassification(ctx context.Context, tx storage.Transaction, p storage.P
 	for _, id := range c.TypeIDs {
 		c.TargetIDs = append(c.TargetIDs, "catalog:v"+c.CatalogVersion+":type:"+id)
 	}
+	for _, id := range c.ComplianceIDs {
+		c.TargetIDs = append(c.TargetIDs, "catalog:v"+c.CatalogVersion+":entry:"+id)
+	}
 	c.Status = "classified"
 	if c.Method == "model_suggested" {
 		c.Status = "suggested"
 	}
-	if len(c.TypeIDs) == 0 {
+	if len(c.TypeIDs) == 0 && len(c.ComplianceIDs) == 0 {
 		c.Status = "unclassified"
 	}
 	return tx.Put(ctx, storage.Record{ID: classificationID(p.OrganizationID, f.ID), Kind: "classification", AssetID: f.AssetID, ReportID: f.ReportID, Data: data(c)}, expected)
@@ -306,9 +361,9 @@ func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record
 		if f.Kind != "finding" {
 			return storage.Record{}, storage.ErrNotFound
 		}
-		for _, typeID := range cl.TypeIDs {
+		for _, typeID := range classificationTargets(cl) {
 			if typeID == parts[1] {
-				target := "catalog:v" + cl.CatalogVersion + ":type:" + typeID
+				target := classificationTarget(cl, typeID)
 				if _, err := tx.Get(ctx, target); err == nil {
 					return storage.Record{}, storage.ErrNotFound
 				} else if err != storage.ErrNotFound {
@@ -321,13 +376,29 @@ func graphGet(ctx context.Context, tx storage.Reader, id string) (storage.Record
 	}
 	return storage.Record{}, storage.ErrNotFound
 }
+func classificationTargets(cl Classification) []string {
+	ids := append([]string{}, cl.TypeIDs...)
+	for _, id := range cl.ComplianceIDs {
+		ids = append(ids, "entry/"+id)
+	}
+	return ids
+}
+func classificationTarget(cl Classification, id string) string {
+	if strings.HasPrefix(id, "entry/") {
+		return "catalog:v" + cl.CatalogVersion + ":entry:" + strings.TrimPrefix(id, "entry/")
+	}
+	return "catalog:v" + cl.CatalogVersion + ":type:" + id
+}
 func classificationEdge(r storage.Record, cl Classification, id string) storage.Record {
 	edgeType := "instance_of"
+	if strings.HasPrefix(id, "entry/") {
+		edgeType = "mapped_to"
+	}
 	if cl.Method == "model_suggested" {
 		edgeType = "suggested_instance_of"
 	}
 	return storage.Record{ID: "classification-edge:" + r.ID + ":" + id, Kind: "relationship", AssetID: r.AssetID, ReportID: r.ReportID, Version: r.Version, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-		Data: data(contracts.Relationship{SourceID: cl.SourceID, Type: edgeType, TargetID: "catalog:v" + cl.CatalogVersion + ":type:" + id, Provenance: cl.Method + "; classification=" + r.ID})}
+		Data: data(contracts.Relationship{SourceID: cl.SourceID, Type: edgeType, TargetID: classificationTarget(cl, id), Provenance: cl.Method + "; classification=" + r.ID})}
 }
 
 // graphEdges projects current classification assignments into instance_of edges.
@@ -404,8 +475,8 @@ func graphEdges(ctx context.Context, tx storage.Reader, front []string, emit fun
 				if f.Kind != "finding" {
 					continue
 				}
-				for _, id := range cl.TypeIDs {
-					target := "catalog:v" + cl.CatalogVersion + ":type:" + id
+				for _, id := range classificationTargets(cl) {
+					target := classificationTarget(cl, id)
 					if !connected[cl.SourceID] && !connected[target] {
 						continue
 					}
