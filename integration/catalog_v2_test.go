@@ -237,10 +237,16 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 				t.Fatalf("exact choice not first for %q", query)
 			}
 		}
-		for _, query := range []string{"CWE-999999", "foobarquuxunmatched", "and the for"} {
+		for _, query := range []string{"CWE-999999", "nist-800-53:AC-2(99)", "nist-ai-rmf:GOVERN 99.99", "iso27001:ISO-IEC-27001:2099", "foobarquuxunmatched", "and the for"} {
 			out := read(map[string]any{"query": query, "limit": 10})
 			if len(out.Types) != 0 || len(out.Compliance) != 0 {
 				t.Fatalf("unrelated fallback for %q", query)
+			}
+		}
+		for _, id := range []string{"nist-800-53:AC-2(1)", "nist-ai-rmf:GOVERN 1.1", "iso27001:ISO-IEC-27001:2022"} {
+			out := read(map[string]any{"query": strings.ToLower(id), "limit": 10})
+			if out.TypeTotal != 0 || out.ComplianceTotal != 1 || len(out.Compliance) != 1 || out.Compliance[0].ID != id || out.NextCursor != "" {
+				t.Fatalf("control ID search returned unrelated choices for %q", id)
 			}
 		}
 		filtered := read(map[string]any{"query": "CWE-78", "framework_id": "cwe", "limit": 10})

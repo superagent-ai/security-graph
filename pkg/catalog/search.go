@@ -8,9 +8,11 @@ import (
 )
 
 // Ranking changes invalidate continuation offsets, not immutable catalog IDs.
-const optionsSearchVersion = "ranked-1"
+const optionsSearchVersion = "ranked-2"
 
-var catalogIdentifier = regexp.MustCompile(`^(?:cwe[-_ ]?[0-9]+|[a-z0-9_-]+:[a-z0-9._-]+)$`)
+// Qualified controls include NIST enhancements, AI RMF numbered groups and
+// release-qualified references. Unknown IDs must not become keyword searches.
+var catalogIdentifier = regexp.MustCompile(`^(?:cwe[-_ ]?[0-9]+|[a-z0-9_-]+:[a-z0-9._:-]+(?:\([0-9]+\))*(?: [0-9]+(?:\.[0-9]+)*)?)$`)
 
 type searchDocument struct {
 	ids, names    []string
