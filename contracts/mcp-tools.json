@@ -274,7 +274,7 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
-    "description": "Search selectable vulnerability_types and compliance lists with query and optional framework_id. Pass query or limit for current paged discovery; legacy intent-only calls return the complete v1 lists. Copy catalog_version into every save. Default 25 choices per list, maximum 100; resume next_cursor with the same filters and limit. Framework metadata states exact coverage. Select both lists independently; mappings never prove compliance.",
+    "description": "Search selectable vulnerability_types and compliance lists ranked by relevance; natural-language keywords need not all match. Exact IDs and names rank first. Prefer a specific CWE or short root cause to refine. Omit framework_id to include cross-framework mappings; framework_id=cwe excludes OWASP and control frameworks. If no suitable choice appears, retry a shorter query or exact CWE and search compliance independently before selecting empty lists. Pass query or limit for current paged discovery; legacy intent-only calls return complete v1 lists. Copy catalog_version into every save. Default 25 choices per list, maximum 100; resume next_cursor with identical filters and limit. Select both lists independently; mappings never prove compliance.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -302,7 +302,7 @@
           "type": "integer"
         },
         "query": {
-          "description": "Search IDs, names, descriptions and aliases (for example clickjacking, CWE-770, SQL injection). Maximum 200 bytes. Refine searches rather than reading the entire catalog.",
+          "description": "Rank IDs, names, descriptions and aliases by relevance. Natural-language keywords need not all match. Exact IDs/names rank first; prefer a specific CWE or short root-cause phrase when refining. Maximum 200 bytes.",
           "type": "string"
         }
       },

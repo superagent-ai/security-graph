@@ -13,7 +13,7 @@ import (
 // immutable release and exact normalized filters, never to tenant records.
 type OptionsQuery struct {
 	CatalogVersion string `json:"catalog_version,omitempty" jsonschema:"Optional immutable catalog version; omit to search the current release. Copy the returned catalog_version into every selection."`
-	Query          string `json:"query,omitempty" jsonschema:"Search IDs, names, descriptions and aliases (for example clickjacking, CWE-770, SQL injection). Maximum 200 bytes. Refine searches rather than reading the entire catalog."`
+	Query          string `json:"query,omitempty" jsonschema:"Rank IDs, names, descriptions and aliases by relevance. Natural-language keywords need not all match. Exact IDs/names rank first; prefer a specific CWE or short root-cause phrase when refining. Maximum 200 bytes."`
 	FrameworkID    string `json:"framework_id,omitempty" jsonschema:"Optional framework ID from frameworks; filter compliance and types with relevance links to that framework."`
 	Limit          int    `json:"limit,omitempty" jsonschema:"Maximum choices per list, default 25, maximum 100."`
 	Cursor         string `json:"cursor,omitempty" jsonschema:"Resume next_cursor with the same query, framework_id and limit."`
@@ -74,7 +74,7 @@ func (c Catalog) Options(q OptionsQuery) (Options, error) {
 			return out, fmt.Errorf("unknown framework_id")
 		}
 	}
-	filter := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%d", q.Query, q.FrameworkID, q.Limit))))
+	filter := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d", optionsSearchVersion, q.Query, q.FrameworkID, q.Limit))))
 	offset := 0
 	if q.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(q.Cursor)
@@ -84,15 +84,7 @@ func (c Catalog) Options(q OptionsQuery) (Options, error) {
 		}
 		offset = cur.Offset
 	}
-	match := func(text string) bool {
-		text = strings.ToLower(text)
-		for _, word := range strings.Fields(q.Query) {
-			if !strings.Contains(text, word) {
-				return false
-			}
-		}
-		return true
-	}
+	search := newCatalogSearch(c, q.Query)
 	linkedTypes := map[string]bool{}
 	for _, m := range c.Mappings {
 		if q.FrameworkID == "" || strings.HasPrefix(m.Target, q.FrameworkID+":") {
@@ -100,41 +92,39 @@ func (c Catalog) Options(q OptionsQuery) (Options, error) {
 		}
 	}
 	types := []Type{}
-	typeIDs := map[string]bool{}
+	typeScores := map[string]float64{}
 	for _, t := range c.Types {
-		if t.Classifiable && !t.Deprecated && (q.FrameworkID == "" || linkedTypes[t.ID]) && match(t.ID+" "+t.Name+" "+t.Description+" "+t.CWEID+" "+strings.Join(t.Aliases, " ")) {
+		score := search.score(search.types[t.ID])
+		if t.Classifiable && !t.Deprecated && (q.FrameworkID == "" || linkedTypes[t.ID]) && score > 0 {
 			types = append(types, t)
-			typeIDs[t.ID] = true
+			typeScores[t.ID] = score
 		}
 	}
-	linkedEntries := map[string]bool{}
+	linkedEntries := map[string]float64{}
 	// A vulnerability search also returns its reference mappings. With no query,
 	// the compliance inventory is independent of the type inventory.
 	if q.Query != "" {
 		for _, m := range c.Mappings {
-			if typeIDs[m.Source] {
-				linkedEntries[m.Target] = true
+			if score := typeScores[m.Source] * 0.8; score > linkedEntries[m.Target] {
+				linkedEntries[m.Target] = score
 			}
 		}
 	}
 	entries := []Entry{}
+	entryScores := map[string]float64{}
 	for _, e := range c.Entries {
-		if !e.Deprecated && (q.FrameworkID == "" || e.Framework == q.FrameworkID) && (match(e.ID+" "+e.Name+" "+e.Description) || linkedEntries[e.ID]) {
+		score := max(search.score(search.entries[e.ID]), linkedEntries[e.ID])
+		if !e.Deprecated && (q.FrameworkID == "" || e.Framework == q.FrameworkID) && score > 0 {
 			entries = append(entries, e)
+			entryScores[e.ID] = score
 		}
 	}
 	// Put exact names/IDs before description-only matches; default discovery
 	// prioritizes the small OWASP taxonomies over large control indexes.
-	rank := func(id, name string) int {
-		if q.Query != "" && (strings.EqualFold(id, q.Query) || strings.EqualFold(name, q.Query)) {
-			return 0
-		}
-		return 1
-	}
 	sort.SliceStable(types, func(i, j int) bool {
-		a, b := rank(types[i].ID, types[i].Name), rank(types[j].ID, types[j].Name)
+		a, b := typeScores[types[i].ID], typeScores[types[j].ID]
 		if a != b {
-			return a < b
+			return a > b
 		}
 		return types[i].ID < types[j].ID
 	})
@@ -151,9 +141,9 @@ func (c Catalog) Options(q OptionsQuery) (Options, error) {
 		}
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
-		a, b := rank(entries[i].ID, entries[i].Name), rank(entries[j].ID, entries[j].Name)
+		a, b := entryScores[entries[i].ID], entryScores[entries[j].ID]
 		if a != b {
-			return a < b
+			return a > b
 		}
 		if priority(entries[i]) != priority(entries[j]) {
 			return priority(entries[i]) < priority(entries[j])

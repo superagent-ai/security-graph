@@ -212,4 +212,103 @@ func catalogV2Discovery(t *testing.T, c client, findingID string) {
 			}
 		}
 	})
+
+	t.Run("natural language discovery ranks usable selections and saves both lists", func(t *testing.T) {
+		for _, tc := range []struct{ query, want string }{
+			{"input validation command injection secure coding", "command_injection"},
+			{"TOCTOU business logic authorization bypass insufficient verification", "cwe_367"},
+			{"payment approval bypass TOCTOU authorization business logic", "business_logic_workflow_failure"},
+			{"link following symlink", "cwe_61"},
+			{"insecure temporary file permissions", "cwe_378"},
+			{"insufficiently protected credentials", "cwe_522"},
+		} {
+			out := read(map[string]any{"query": tc.query, "limit": 10})
+			found := false
+			for _, v := range out.Types {
+				found = found || v.ID == tc.want
+			}
+			if !found || len(out.Compliance) == 0 {
+				t.Fatalf("no usable first page for %q: %+v", tc.query, out)
+			}
+		}
+		for _, query := range []string{"CWE-78", "command_injection", "OS command injection"} {
+			out := read(map[string]any{"query": query, "limit": 10})
+			if len(out.Types) == 0 || out.Types[0].ID != "command_injection" {
+				t.Fatalf("exact choice not first for %q", query)
+			}
+		}
+		for _, query := range []string{"CWE-999999", "nist-800-53:AC-2(99)", "nist-ai-rmf:GOVERN 99.99", "iso27001:ISO-IEC-27001:2099", "foobarquuxunmatched", "and the for"} {
+			out := read(map[string]any{"query": query, "limit": 10})
+			if len(out.Types) != 0 || len(out.Compliance) != 0 {
+				t.Fatalf("unrelated fallback for %q", query)
+			}
+		}
+		for _, id := range []string{"nist-800-53:AC-2(1)", "nist-ai-rmf:GOVERN 1.1", "iso27001:ISO-IEC-27001:2022"} {
+			out := read(map[string]any{"query": strings.ToLower(id), "limit": 10})
+			if out.TypeTotal != 0 || out.ComplianceTotal != 1 || len(out.Compliance) != 1 || out.Compliance[0].ID != id || out.NextCursor != "" {
+				t.Fatalf("control ID search returned unrelated choices for %q", id)
+			}
+		}
+		filtered := read(map[string]any{"query": "CWE-78", "framework_id": "cwe", "limit": 10})
+		for _, e := range filtered.Compliance {
+			if e.Framework != "cwe" {
+				t.Fatal("explicit framework filter was ignored")
+			}
+		}
+		choices := read(map[string]any{"query": "input validation command injection secure coding", "limit": 10})
+		mapped := false
+		for _, e := range choices.Compliance {
+			mapped = mapped || e.ID == "owasp-web:A05"
+		}
+		if !mapped {
+			t.Fatal("natural-language weakness search hid the published OWASP mapping")
+		}
+		prior := c.record(t, "get_finding_classification", map[string]any{"intent": "Read the assignment before saving discovered choices.", "finding_id": findingID})
+		a := writeArgs()
+		a["finding_id"], a["expected_version"], a["expected_classification_version"] = findingID, 1, prior.Version
+		a["catalog_version"], a["type_ids"], a["compliance_ids"] = choices.CatalogVersion, []string{"command_injection"}, []string{"owasp-web:A05"}
+		a["rationale"] = "The discovered choices identify OS command injection and its publisher OWASP risk mapping."
+		c.record(t, "set_finding_classification", a)
+		graph := c.call(t, "get_context", map[string]any{"intent": "Verify the discovered choices persist as graph connections.", "entity_id": findingID, "depth": 1, "limit": 100})
+		for _, id := range []string{"catalog:v2:type:command_injection", "catalog:v2:entry:owasp-web:A05"} {
+			if !bytes.Contains(graph.Result.Structured, []byte(id)) {
+				t.Fatalf("missing selected node %s", id)
+			}
+		}
+	})
+
+	t.Run("ranked results retain stable independent pagination", func(t *testing.T) {
+		full := read(map[string]any{"query": "symlink", "limit": 100})
+		seenTypes, seenEntries := map[string]bool{}, map[string]bool{}
+		cursor := ""
+		for page := 0; page < 50; page++ {
+			query := map[string]any{"query": "symlink", "limit": 3, "cursor": cursor}
+			out := read(query)
+			again := read(query)
+			a, _ := json.Marshal(out)
+			b, _ := json.Marshal(again)
+			if !bytes.Equal(a, b) {
+				t.Fatal("ranking changed between identical requests")
+			}
+			for _, v := range out.Types {
+				if seenTypes[v.ID] {
+					t.Fatal("duplicate ranked type")
+				}
+				seenTypes[v.ID] = true
+			}
+			for _, e := range out.Compliance {
+				if seenEntries[e.ID] {
+					t.Fatal("duplicate ranked compliance entry")
+				}
+				seenEntries[e.ID] = true
+			}
+			if out.NextCursor == "" {
+				break
+			}
+			cursor = out.NextCursor
+		}
+		if len(seenTypes) != full.TypeTotal || len(seenEntries) != full.ComplianceTotal {
+			t.Fatal("ranked pagination omitted results")
+		}
+	})
 }
