@@ -18,7 +18,9 @@ import (
 	"github.com/superagent-ai/security-graph/pkg/storage"
 )
 
-type Adapter struct{}
+type Adapter struct {
+	exactReads bool
+}
 
 func Enable(ctx context.Context, s *postgres.Store) error {
 	var ok bool
@@ -28,7 +30,14 @@ func Enable(ctx context.Context, s *postgres.Store) error {
 	if !ok {
 		return errors.New("apply the app security_graph_native_integration migration before selecting the superagent backend")
 	}
-	s.Native = &Adapter{}
+	// Feature discovery is schema metadata, never an authorization decision.
+	// Old App schemas keep their existing reads until the migration is applied
+	// and this engine is restarted; old engines also work with the new schema.
+	var exactReads bool
+	if err := s.Pool.QueryRow(ctx, "SELECT to_regprocedure('security_graph.app_record(text,text,boolean,text[],text[])') IS NOT NULL").Scan(&exactReads); err != nil {
+		return err
+	}
+	s.Native = &Adapter{exactReads: exactReads}
 	return nil
 }
 func (a *Adapter) Authenticate(ctx context.Context, s *postgres.Store, token string) (storage.Principal, error) {
@@ -66,6 +75,9 @@ func scan(row pgx.Row) (r storage.Record, err error) {
 	return
 }
 func (a *Adapter) Get(ctx context.Context, tx pgx.Tx, p storage.Principal, id string) (storage.Record, error) {
+	if a.exactReads {
+		return scan(tx.QueryRow(ctx, "SELECT "+fields+" FROM security_graph.app_record($1,$2,$3,$4::text[],NULL)", p.OrganizationID, id, p.AllAssets, p.AssetIDs))
+	}
 	return scan(tx.QueryRow(ctx, "SELECT "+fields+" FROM security_graph.app_records WHERE organization_id=$1 AND id=$2 AND ($3 OR asset_id=ANY($4::text[]))", p.OrganizationID, id, p.AllAssets, p.AssetIDs))
 }
 func (a *Adapter) List(ctx context.Context, tx pgx.Tx, p storage.Principal, q storage.Query) ([]storage.Record, error) {
@@ -250,8 +262,12 @@ func (a *Adapter) finding(ctx context.Context, tx pgx.Tx, p storage.Principal, r
 	if f.Kind == "pr_scan" {
 		// PR versions also include scan/reviewer timestamps. Compare the live
 		// projection rather than only the underlying finding's updated_at.
+		versionSource := "security_graph.app_records"
+		if a.exactReads {
+			versionSource = "security_graph.app_record($6,$4::text,true,NULL,ARRAY['finding'])"
+		}
 		tag, err := tx.Exec(ctx, `UPDATE public.protection_findings SET triage_status=$1,triage_resolution=$2,triaged_at=$3,updated_at=clock_timestamp()
- WHERE id=$4 AND $5=(SELECT version FROM security_graph.app_records WHERE organization_id=$6 AND id=$4::text AND kind='finding')`, f.Triage.Status, f.Triage.Resolution, triagedAt(f.Triage.Status), r.ID, expected, p.OrganizationID)
+ WHERE id=$4 AND $5=(SELECT version FROM `+versionSource+` WHERE organization_id=$6 AND id=$4::text AND kind='finding')`, f.Triage.Status, f.Triage.Resolution, triagedAt(f.Triage.Status), r.ID, expected, p.OrganizationID)
 		if err != nil {
 			return err
 		}

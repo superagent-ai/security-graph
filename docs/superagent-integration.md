@@ -18,6 +18,34 @@ Existing app keys grant the existing organization-wide access. No new per-agent 
 
 Use a dedicated server database login and a direct or session-pool connection. The role must read the five finding sources, four report sources, connected repositories, API keys, and organization memberships; insert/update the native report/finding tables; update API-key `last_used_at`; and read/write private graph metadata with sequence access. It must be allowed to operate across tenants through the app's existing server-side RLS bypass mechanism. Never expose this database credential to MCP clients. DDL belongs to the migration role. The local integration runner uses only the local Supabase database administrator.
 
+### Typed exact-record reads
+
+Apply App migration `20261116075832_typed_native_graph_record_reads.sql`, then
+deploy or restart this engine to use its private `security_graph.app_record`
+loader for exact reads and PR optimistic-version comparisons. The loader uses
+native UUID primary keys before serializing findings/reports and resolves comment
+parents by native keys. It shares the canonical serializers and preserves custom
+asset IDs, synthetic feedback, relationships, graph-only entities and source
+versions. Public MCP inputs and responses are unchanged.
+
+The adapter discovers loader availability at startup. A new engine on an older
+App schema retains the previous view-based reads; an old engine also works after
+the migration. If the migration is installed after an engine starts, restart that
+engine to enable typed adapter reads. Roll back the engine independently while
+retaining the additive migration. This feature check never caches credentials,
+organization/asset authorization, or native history-search receipts.
+
+The App's native runner exact-query path uses the loader as soon as the migration
+is applied. Exact reads still do not establish the search receipt required before
+native publication. General keyword search keeps its existing matching behavior.
+
+`TEST_APP_DATABASE_URL=<disposable local App database> make integration` includes
+an actual HTTP comparison between adapters initialized with and without the
+loader. It covers read responses, comment context, entity fallback, PR mutation
+readbacks, stale versions and idempotent replay. When a dedicated runtime role is
+available, the check also removes its legacy-view grant temporarily to prove
+typed reads and PR version fencing work through the new loader.
+
 ## Domain behavior
 
 - Existing app finding/report detail MCP tools use the app's public serializers and add an optimistic `version`. Native Go reads provide normalized context with the same lifecycle vocabulary.
