@@ -144,6 +144,7 @@ func TestNativeExactRecordMCPParity(t *testing.T) {
 	for _, id := range []string{findingID, advisory, "pr-feedback:" + repo + ":1:" + findingID} {
 		compare("get_finding", map[string]any{"finding_id": id})
 	}
+	compare("get_context", map[string]any{"entity_id": findingID, "depth": 2, "limit": 100})
 	commentArgs := writeArgs()
 	commentArgs["finding_id"], commentArgs["body"] = findingID, "Preserve discussion on exact read."
 	comment := newClient.record(t, "create_finding_comment", commentArgs)

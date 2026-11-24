@@ -224,7 +224,7 @@ func (e *Engine) UpdateFinding(ctx context.Context, p storage.Principal, a Updat
 		if err != nil {
 			return nil, err
 		}
-		if f.Kind == "github_advisory" || f.Kind == "pr_scan" {
+		if f.Kind == "github_advisory" || f.Kind == "pr_scan" || f.Kind == "script_guard" {
 			return saved, nil
 		}
 		if err = e.syncReport(ctx, tx, f.ReportID); err != nil {
