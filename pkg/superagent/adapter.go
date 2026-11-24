@@ -84,12 +84,24 @@ func (a *Adapter) List(ctx context.Context, tx pgx.Tx, p storage.Principal, q st
 	if q.Limit < 1 || q.Limit > 201 {
 		return nil, contracts.ErrInvalid
 	}
+	// Exact endpoint checks keep each source serializer out of the edge query's
+	// repeated visibility subplans. Use the same scope and native-first shadowing
+	// as the legacy projection, including graph-only classification metadata.
+	unshadowed := "NOT EXISTS(SELECT 1 FROM security_graph.app_records n WHERE n.organization_id=e.organization_id AND n.id=e.id)"
+	endpoints := "(EXISTS(SELECT 1 FROM records n WHERE n.organization_id=r.organization_id AND n.id=r.data->>'source_id' AND ($2 OR n.asset_id=ANY($3::text[]))) AND EXISTS(SELECT 1 FROM records n WHERE n.organization_id=r.organization_id AND n.id=r.data->>'target_id' AND ($2 OR n.asset_id=ANY($3::text[]))))"
+	if a.exactReads {
+		unshadowed = "NOT EXISTS(SELECT 1 FROM security_graph.app_record($1,e.id,true,NULL,NULL))"
+		endpoint := func(key string) string {
+			return "(EXISTS(SELECT 1 FROM security_graph.app_record($1,r.data->>'" + key + "',$2,$3::text[],NULL)) OR EXISTS(SELECT 1 FROM security_graph.entities n WHERE n.organization_id=$1 AND n.id=r.data->>'" + key + "' AND ($2 OR n.asset_id=ANY($3::text[])) AND n.kind IN ('asset','relationship','classification') AND NOT EXISTS(SELECT 1 FROM security_graph.app_record($1,n.id,true,NULL,NULL))))"
+		}
+		endpoints = "(" + endpoint("source_id") + " AND " + endpoint("target_id") + ")"
+	}
 	// Graph-only assets and explicit relationships live beside native records;
 	// the union never duplicates an app finding/report into graph persistence.
 	rows, err := tx.Query(ctx, `WITH records AS NOT MATERIALIZED (
  SELECT organization_id,`+fields+` FROM security_graph.app_records
- UNION ALL SELECT organization_id,`+fields+` FROM security_graph.entities e WHERE kind IN ('asset','relationship','classification') AND NOT EXISTS(SELECT 1 FROM security_graph.app_records n WHERE n.organization_id=e.organization_id AND n.id=e.id)
- ) SELECT `+fields+` FROM records r WHERE organization_id=$1 AND ($2 OR asset_id=ANY($3::text[])) AND ($4='' OR kind=$4) AND ($5='' OR report_id=$5) AND ($6='' OR asset_id=$6) AND id>$7 AND ($8='' OR strpos(lower(data::text),lower($8))>0) AND ($10::text[] IS NULL OR data->>'source_id'=ANY($10::text[]) OR data->>'target_id'=ANY($10::text[]) OR (kind='classification' AND (data->'target_ids') ?| $10::text[])) AND (kind<>'relationship' OR (EXISTS(SELECT 1 FROM records n WHERE n.organization_id=r.organization_id AND n.id=r.data->>'source_id' AND ($2 OR n.asset_id=ANY($3::text[]))) AND EXISTS(SELECT 1 FROM records n WHERE n.organization_id=r.organization_id AND n.id=r.data->>'target_id' AND ($2 OR n.asset_id=ANY($3::text[]))))) AND ($11='' OR data->>'kind'=$11) AND ($12='' OR data->'triage'->>'status'=$12) AND ($13='' OR data->>'type'=$13) AND ($14='' OR data->>'status'=$14) AND ($16='' OR data->>'source'=$16) ORDER BY id LIMIT $9 OFFSET $15`, p.OrganizationID, p.AllAssets, p.AssetIDs, q.Kind, q.ReportID, q.AssetID, q.After, q.Search, q.Limit, q.ConnectedTo, q.FindingKind, q.TriageStatus, q.ReportType, q.Status, q.Offset, q.Source)
+ UNION ALL SELECT organization_id,`+fields+` FROM security_graph.entities e WHERE kind IN ('asset','relationship','classification') AND `+unshadowed+`
+ ) SELECT `+fields+` FROM records r WHERE organization_id=$1 AND ($2 OR asset_id=ANY($3::text[])) AND ($4='' OR kind=$4) AND ($5='' OR report_id=$5) AND ($6='' OR asset_id=$6) AND id>$7 AND ($8='' OR strpos(lower(data::text),lower($8))>0) AND ($10::text[] IS NULL OR data->>'source_id'=ANY($10::text[]) OR data->>'target_id'=ANY($10::text[]) OR (kind='classification' AND (data->'target_ids') ?| $10::text[])) AND (kind<>'relationship' OR `+endpoints+`) AND ($11='' OR data->>'kind'=$11) AND ($12='' OR data->'triage'->>'status'=$12) AND ($13='' OR data->>'type'=$13) AND ($14='' OR data->>'status'=$14) AND ($16='' OR data->>'source'=$16) ORDER BY id LIMIT $9 OFFSET $15`, p.OrganizationID, p.AllAssets, p.AssetIDs, q.Kind, q.ReportID, q.AssetID, q.After, q.Search, q.Limit, q.ConnectedTo, q.FindingKind, q.TriageStatus, q.ReportType, q.Status, q.Offset, q.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +161,10 @@ func (a *Adapter) report(ctx context.Context, tx pgx.Tx, p storage.Principal, r,
 	var report contracts.Report
 	if err := json.Unmarshal(r.Data, &report); err != nil {
 		return err
+	}
+	// Script Guard owns execution and derives review completion from its findings.
+	if report.Type == "script_guard" {
+		return storage.ErrForbidden
 	}
 	s, ok := sources[report.Type]
 	if !ok {
@@ -215,6 +231,9 @@ func (a *Adapter) finding(ctx context.Context, tx pgx.Tx, p storage.Principal, r
 	var f contracts.Finding
 	if err := json.Unmarshal(r.Data, &f); err != nil {
 		return err
+	}
+	if f.Kind == "script_guard" {
+		return a.scriptGuardFinding(ctx, tx, p, f, expected)
 	}
 	typ := strings.TrimSuffix(f.Kind, "_red_team")
 	s, ok := sources[typ]

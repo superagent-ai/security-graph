@@ -48,6 +48,57 @@ typed reads and PR version fencing work through the new loader.
 
 ## Domain behavior
 
+### Script Guard
+
+App migration `20261124102314_script_guard_security_graph.sql` adds the
+`script_guard` finding/report source. Accepted findings remain authoritative in
+`dns_script_scans.findings`; Graph projects them directly through the shared
+serializers. There is no network publication step, so service downtime cannot
+lose a completed assessment or repeat analysis, billing, or notifications.
+The migration indexes historical finding identities without replaying alerts.
+
+The site asset is `script_guard:<site UUID>`. Captured versions appear as
+`script-version:<version UUID>` resources, with site and finding relationships.
+Each report retains its scan UUID. Finding UUIDs are deterministic from the scan
+UUID and canonical finding JSON; identical entries deduplicate and separate
+versions retain separate provenance. Exact finding reads use the identity index.
+Records include the site, original script URL, version SHA-256, exact line
+excerpts, source review method, and the captured version's dashboard link.
+On schemas with the typed record loader, edge visibility and native-record
+shadowing use exact scoped lookups. This avoids repeatedly expanding every
+source serializer when planning a neighborhood read; older schemas retain the
+existing view-based checks.
+
+Independent source review is exposed as `heuristic`, with `runtime_verified=false`;
+it never asserts that an exploit was executed. New assessments retain their
+structured limitations. Historical assessments have `limitations=null` because
+the previous App save path discarded that field; missing limitations are not
+reconstructed. Neutral, inconclusive, failed, and unreviewed results create no
+vulnerability findings. Their assessment verdict remains visible on the report.
+
+Organization API keys can read, search, classify, and review these findings with
+the existing tools. Classification uses the existing agent-selected catalog
+contract. `update_finding_triage` writes only private review metadata, atomically
+with audit and idempotency receipts, using the current expected version.
+Reopening clears the resolution. Report review status derives from the findings;
+the App owns scan execution and terminal status. `create_report`, `submit_finding`,
+manual report status changes, and finding comments do not create or rewrite
+Script Guard assessments. Review actions leave the scan verdict, original
+evidence, and existing notification owners intact.
+
+Deploy the additive App migration, then this engine, then the App MCP compatibility
+and dashboard changes. New migrations grant source reads and review writes only
+to existing trusted Graph runtime roles. Old engines retain read access after the
+migration; this engine enables Script Guard disposition updates. Removing a site
+removes its capture records and private identity/review metadata through existing
+foreign-key cascades.
+
+Run `TEST_APP_DATABASE_URL=<disposable local migrated App database> make integration`
+for the real HTTP/MCP review checks, and the App's
+`tests/integration/script-guard-security-graph.test.ts` through
+`scripts/test-security-graph-native.sh` for the host-validation and Next forwarding
+workflow against this engine revision.
+
 - Existing app finding/report detail MCP tools use the app's public serializers and add an optimistic `version`. Native Go reads provide normalized context with the same lifecycle vocabulary.
 - `create_report` records external work in the matching native report table, without provisioning a sandbox, starting an internal scan, or billing models. Native report origins retain the API-key actor and asset mapping. Only the originating key can finish that external execution. Existing native scans keep their execution ownership.
 - `submit_finding` validates the shared repository authoring contract: policy evidence, code references, PoC, proposed patch, validation evidence, and the six Markdown sections. It writes existing advisory fields with triage `new` and no independent verification assertion. Full structured submission and actual API-key attribution remain in triage evidence and graph history.
